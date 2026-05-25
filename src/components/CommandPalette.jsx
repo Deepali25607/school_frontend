@@ -50,6 +50,8 @@ import {
   UsersRound,
 } from "lucide-react";
 import { endpoints } from "../lib/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { NAV } from "../layouts/nav.js";
 
 const ICON_MAP = {
   Users,
@@ -156,6 +158,25 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // The palette respects the same permission stack the sidebar does:
+  //   role default (NAV.roles)  →  admin-set hidden paths
+  // Anything filtered out here is also unreachable from search results.
+  const allowedPaths = useMemo(() => {
+    const role = user?.role;
+    const adminHidden = new Set(user?.permissions?.hiddenPaths || []);
+    return new Set(
+      NAV
+        .filter((n) => n.roles === "*" || (role && n.roles.includes(role)))
+        .filter((n) => !adminHidden.has(n.to))
+        .map((n) => n.to)
+    );
+  }, [user?.role, user?.permissions?.hiddenPaths]);
+  const visibleQuickNav = useMemo(
+    () => QUICK_NAV.filter((n) => allowedPaths.has(n.link)),
+    [allowedPaths]
+  );
 
   // Reset state whenever the palette is opened
   useEffect(() => {
@@ -221,7 +242,7 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
         _group: "Recent",
         _query: r,
       })),
-      ...QUICK_NAV.map((n) => ({
+      ...visibleQuickNav.map((n) => ({
         category: "Go to",
         label: n.label,
         sublabel: n.link,
@@ -231,7 +252,7 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
         _group: "Go to",
       })),
     ];
-  }, [debounced, results, recent]);
+  }, [debounced, results, recent, visibleQuickNav]);
 
   const pickItem = useCallback(
     (item) => {
@@ -347,6 +368,7 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
                   activeIdx={activeIdx}
                   onPick={pickItem}
                   setActive={setActiveIdx}
+                  quickNav={visibleQuickNav}
                 />
               )}
             </div>
@@ -413,7 +435,7 @@ function ResultsGroups({ groups, activeIdx, onPick, setActive }) {
   );
 }
 
-function EmptyStateLists({ recent, activeIdx, onPick, setActive }) {
+function EmptyStateLists({ recent, activeIdx, onPick, setActive, quickNav }) {
   let counter = -1;
   return (
     <div className="space-y-3">
@@ -453,7 +475,7 @@ function EmptyStateLists({ recent, activeIdx, onPick, setActive }) {
           Go to module
         </div>
         <ul className="grid grid-cols-2 gap-0.5">
-          {QUICK_NAV.map((n) => {
+          {quickNav.map((n) => {
             counter += 1;
             const idx = counter;
             const item = {

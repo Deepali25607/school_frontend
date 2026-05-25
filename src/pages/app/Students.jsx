@@ -54,7 +54,17 @@ export default function Students() {
     [debouncedQ, grade]
   );
 
-  const items = data?.items || [];
+  // Pin the student's own record to the top of their batch so they can find
+  // themselves immediately. The seed student account's name doesn't always
+  // match the linked Student record so a "You" tag is the clearest signal.
+  const myStudentId = user?.scope?.studentId || null;
+  const items = (() => {
+    const raw = data?.items || [];
+    if (!myStudentId) return raw;
+    const mine = raw.find((s) => s.id === myStudentId);
+    if (!mine) return raw;
+    return [mine, ...raw.filter((s) => s.id !== myStudentId)];
+  })();
 
   const onExport = () => {
     const rows = items.map((s) =>
@@ -157,14 +167,18 @@ export default function Students() {
                 </tr>
               </thead>
               <tbody>
-                {items.slice(0, 60).map((s, i) => (
+                {items.slice(0, 60).map((s, i) => {
+                  const isSelf = s.id === myStudentId;
+                  return (
                   <motion.tr
                     key={s.id}
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.012 }}
                     onClick={() => navigate(`/app/students/${s.id}`)}
-                    className="group cursor-pointer border-t border-white/5 transition-colors hover:bg-white/[0.04]"
+                    className={`group cursor-pointer border-t border-white/5 transition-colors hover:bg-white/[0.04] ${
+                      isSelf ? "bg-emerald-500/[0.06] hover:bg-emerald-500/[0.10]" : ""
+                    }`}
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
@@ -172,10 +186,17 @@ export default function Students() {
                           photoUrl={s.photoUrl}
                           initials={s.avatar}
                           size={36}
-                          fallbackClass="from-brand-500 to-accent-pink"
+                          fallbackClass={isSelf ? "from-emerald-500 to-teal-500" : "from-brand-500 to-accent-pink"}
                         />
                         <div>
-                          <div className="font-medium">{s.name}</div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-medium">{s.name}</span>
+                            {isSelf && (
+                              <span className="rounded-full bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-200 ring-1 ring-emerald-400/40">
+                                You
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[11px] text-white/50">
                             Section {s.section}
                           </div>
@@ -234,7 +255,8 @@ export default function Students() {
                       </div>
                     </td>
                   </motion.tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

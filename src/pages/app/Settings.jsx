@@ -22,12 +22,16 @@ import {
   Mail,
   Phone,
   Check,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { PageHeader } from "./Students.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useNotificationPrefs } from "../../lib/useNotificationPrefs.js";
 import { useSidebarPrefs } from "../../lib/useSidebarPrefs.js";
+import { useTheme } from "../../lib/useTheme.js";
 import CustomizeSidebar from "../../components/CustomizeSidebar.jsx";
 import PhotoUploader from "../../components/PhotoUploader.jsx";
 import { NAV } from "../../layouts/nav.js";
@@ -401,12 +405,19 @@ function NotificationsCard() {
 function AppearanceCard() {
   const { user } = useAuth();
   const sidebar = useSidebarPrefs();
+  const theme = useTheme();
   const [open, setOpen] = useState(false);
 
   const roleAllowed = NAV.filter(
     (n) => n.roles === "*" || n.roles.includes(user?.role)
   );
   const hiddenCount = roleAllowed.filter((n) => sidebar.isHidden(n.to)).length;
+
+  const themeOptions = [
+    { id: "dark", label: "Dark", icon: Moon, hint: "Cosmic, low-glare" },
+    { id: "light", label: "Light", icon: Sun, hint: "Bright, daytime" },
+    { id: "system", label: "System", icon: Monitor, hint: "Follow OS setting" },
+  ];
 
   return (
     <>
@@ -418,13 +429,40 @@ function AppearanceCard() {
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-center gap-2 text-sm font-medium text-white">
-              <SparklesIcon size={14} className="text-accent-gold" />
-              Theme
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-white">
+                <SparklesIcon size={14} className="text-accent-gold" />
+                Theme
+              </div>
+              <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/55 ring-1 ring-white/10">
+                {theme.resolved}
+              </span>
             </div>
             <div className="mt-2 text-xs text-white/55">
-              Lumina ships in dark-mode only — designed for after-hours admin
-              work and projector-friendly demos. Light mode is on the roadmap.
+              Choose how Lumina looks. System matches your OS — flips automatically
+              when day-mode kicks in.
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {themeOptions.map((opt) => {
+                const Icon = opt.icon;
+                const active = theme.mode === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => theme.setTheme(opt.id)}
+                    className={`flex flex-col items-center gap-1 rounded-lg border px-2 py-2.5 text-xs transition ${
+                      active
+                        ? "border-brand-400/40 bg-brand-500/15 text-white shadow shadow-brand-500/20"
+                        : "border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <Icon size={16} className={active ? "text-brand-200" : "text-white/55"} />
+                    <span className="font-medium">{opt.label}</span>
+                    <span className="text-[10px] text-white/45">{opt.hint}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">

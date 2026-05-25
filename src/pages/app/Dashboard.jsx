@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   AreaChart,
   Area,
@@ -27,6 +28,19 @@ import { useApi } from "../../lib/useApi.js";
 import { useRealtime } from "../../lib/useRealtime.js";
 import { endpoints } from "../../lib/api.js";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
+import { NAV } from "../../layouts/nav.js";
+
+// Returns true when the user's role is in the NAV entry's allowlist AND the
+// admin hasn't hidden the path for them. Matches the same check the sidebar
+// and CommandPalette use.
+function canAccess(user, path) {
+  const entry = NAV.find((n) => n.to === path);
+  if (!entry) return false;
+  const role = user?.role;
+  const roleOK = entry.roles === "*" || (role && entry.roles.includes(role));
+  if (!roleOK) return false;
+  return !(user?.permissions?.hiddenPaths || []).includes(path);
+}
 
 const fadeUp = {
   initial: { opacity: 0, y: 20 },
@@ -67,7 +81,18 @@ function StatCard({ icon: Icon, label, value, delta, tint, idx }) {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { data, loading, error, refetch } = useApi(endpoints.dashboard, []);
+
+  const canGenerateReport = canAccess(user, "/app/reports");
+  // Quick action opens the global command palette. It's only useful when the
+  // user actually has somewhere to go from the palette. Dashboard ("/app")
+  // is the universal floor, but we hide the button if the user has nothing
+  // *beyond* dashboard available (admin could lock them down that hard).
+  const navTargets = NAV.filter(
+    (n) => n.to !== "/app" && (n.roles === "*" || (user?.role && n.roles.includes(user.role)))
+  ).filter((n) => !(user?.permissions?.hiddenPaths || []).includes(n.to));
+  const canQuickAction = navTargets.length > 0;
   useRealtime(
     ["attendance.changed", "fees.changed", "students.changed", "teachers.changed"],
     () => refetch()
@@ -107,67 +132,135 @@ export default function Dashboard() {
               Here's what's happening across your school today.
             </p>
           </div>
-          <div className="flex gap-2">
-            <button className="btn-ghost">Generate report</button>
-            <button className="btn-primary">
-              Quick action <ArrowUpRight size={16} />
-            </button>
-          </div>
+          {(canGenerateReport || canQuickAction) && (
+            <div className="flex gap-2">
+              {canGenerateReport && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/app/reports")}
+                  className="btn-ghost"
+                >
+                  Generate report
+                </button>
+              )}
+              {canQuickAction && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    window.dispatchEvent(new CustomEvent("lumina:open-palette"))
+                  }
+                  className="btn-primary"
+                >
+                  Quick action <ArrowUpRight size={16} />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </motion.div>
 
       {error && <ErrorState error={error} onRetry={refetch} />}
 
-      {/* Stat cards */}
+      {/* Stat cards — only render the ones the API actually returned.
+          Anything not in data.stats was either not allowed for this role
+          or hidden by an admin permission override. */}
       {loading ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-32" />
           ))}
         </div>
-      ) : data ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard
-            idx={0}
-            icon={Users}
-            label="Total students"
-            value={data.stats.totalStudents.toLocaleString()}
-            delta="+4.2%"
-            tint="radial-gradient(circle, rgba(91,129,255,0.35), transparent 60%)"
-          />
-          <StatCard
-            idx={1}
-            icon={GraduationCap}
-            label="Teachers"
-            value={data.stats.totalTeachers}
-            delta="+1.1%"
-            tint="radial-gradient(circle, rgba(155,92,255,0.35), transparent 60%)"
-          />
-          <StatCard
-            idx={2}
-            icon={Wallet}
-            label="Fee collected (₹)"
-            value={`${(data.stats.feeCollected / 100000).toFixed(1)}L`}
-            delta="+12.6%"
-            tint="radial-gradient(circle, rgba(92,242,196,0.35), transparent 60%)"
-          />
-          <StatCard
-            idx={3}
-            icon={CalendarCheck}
-            label="Attendance today"
-            value={`${data.stats.attendanceToday}%`}
-            delta="+0.8%"
-            tint="radial-gradient(circle, rgba(255,94,196,0.35), transparent 60%)"
-          />
-        </div>
+      ) : data && data.stats ? (
+        (() => {
+          const cards = [];
+          let idx = 0;
+          const att = data.stats.attendanceToday;
+          if (data.stats.totalStudents !== undefined) {
+            cards.push(
+              <StatCard
+                key="ts"
+                idx={idx++}
+                icon={Users}
+                label="Total students"
+                value={data.stats.totalStudents.toLocaleString()}
+                delta="+4.2%"
+                tint="radial-gradient(circle, rgba(91,129,255,0.35), transparent 60%)"
+              />
+            );
+          }
+          if (data.stats.totalTeachers !== undefined) {
+            cards.push(
+              <StatCard
+                key="tt"
+                idx={idx++}
+                icon={GraduationCap}
+                label="Teachers"
+                value={data.stats.totalTeachers}
+                delta="+1.1%"
+                tint="radial-gradient(circle, rgba(155,92,255,0.35), transparent 60%)"
+              />
+            );
+          }
+          if (data.stats.feeCollected !== undefined) {
+            cards.push(
+              <StatCard
+                key="fc"
+                idx={idx++}
+                icon={Wallet}
+                label="Fee collected (₹)"
+                value={`${(data.stats.feeCollected / 100000).toFixed(1)}L`}
+                delta="+12.6%"
+                tint="radial-gradient(circle, rgba(92,242,196,0.35), transparent 60%)"
+              />
+            );
+          }
+          if (att !== undefined) {
+            const isSelf = att && typeof att === "object" && att.self;
+            cards.push(
+              <StatCard
+                key="at"
+                idx={idx++}
+                icon={CalendarCheck}
+                label={isSelf ? "Your attendance" : "Attendance today"}
+                value={isSelf ? att.status : `${att}%`}
+                delta={isSelf ? null : "+0.8%"}
+                tint="radial-gradient(circle, rgba(255,94,196,0.35), transparent 60%)"
+              />
+            );
+          }
+          if (cards.length === 0) return null;
+          return (
+            <div
+              className={`grid gap-4 ${
+                cards.length === 1
+                  ? "grid-cols-1"
+                  : cards.length === 2
+                  ? "grid-cols-2"
+                  : cards.length === 3
+                  ? "grid-cols-2 lg:grid-cols-3"
+                  : "grid-cols-2 lg:grid-cols-4"
+              }`}
+            >
+              {cards}
+            </div>
+          );
+        })()
       ) : null}
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* Charts row — each chart conditional on the data being present */}
+      {data && (data.attendanceTrend || data.feeBreakdown) && (
+      <div
+        className={`grid grid-cols-1 gap-4 ${
+          data.attendanceTrend && data.feeBreakdown
+            ? "lg:grid-cols-3"
+            : "lg:grid-cols-1"
+        }`}
+      >
+        {data.attendanceTrend && (
         <motion.div
           {...fadeUp}
           transition={{ delay: 0.2, duration: 0.6 }}
-          className="card lg:col-span-2"
+          className={`card ${data.feeBreakdown ? "lg:col-span-2" : ""}`}
         >
           <div className="mb-3 flex items-center justify-between">
             <div>
@@ -238,7 +331,9 @@ export default function Dashboard() {
             )}
           </div>
         </motion.div>
+        )}
 
+        {data.feeBreakdown && (
         <motion.div
           {...fadeUp}
           transition={{ delay: 0.3, duration: 0.6 }}
@@ -294,14 +389,20 @@ export default function Dashboard() {
             </div>
           )}
         </motion.div>
+        )}
       </div>
+      )}
 
-      {/* Activity + Announcements */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      {/* Activity + Announcements — announcements column only if allowed */}
+      <div
+        className={`grid grid-cols-1 gap-4 ${
+          data?.announcements ? "lg:grid-cols-3" : "lg:grid-cols-1"
+        }`}
+      >
         <motion.div
           {...fadeUp}
           transition={{ delay: 0.4, duration: 0.6 }}
-          className="card lg:col-span-2"
+          className={`card ${data?.announcements ? "lg:col-span-2" : ""}`}
         >
           <div className="mb-4 flex items-center justify-between">
             <div className="font-display text-lg font-semibold">
@@ -344,6 +445,7 @@ export default function Dashboard() {
           </ul>
         </motion.div>
 
+        {data?.announcements && (
         <motion.div
           {...fadeUp}
           transition={{ delay: 0.5, duration: 0.6 }}
@@ -368,6 +470,7 @@ export default function Dashboard() {
             ))}
           </div>
         </motion.div>
+        )}
       </div>
     </div>
   );

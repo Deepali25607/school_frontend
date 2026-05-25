@@ -532,6 +532,24 @@ export const endpoints = {
     api.patch(`/api/staff/${id}`, payload).then((r) => r.data),
   staffDelete: (id) => api.delete(`/api/staff/${id}`).then((r) => r.data),
 
+  // users & access management (admin)
+  users: (params) =>
+    api.get("/api/users", { params }).then((r) => r.data),
+  userAdd: (payload) =>
+    api.post("/api/users", payload).then((r) => r.data),
+  userUpdate: (id, patch) =>
+    api.patch(`/api/users/${id}`, patch).then((r) => r.data),
+  userDelete: (id) =>
+    api.delete(`/api/users/${id}`).then((r) => r.data),
+  userResetPassword: (id, newPassword) =>
+    api
+      .post(`/api/users/${id}/reset-password`, { newPassword })
+      .then((r) => r.data),
+  userSetPermissions: (id, payload) =>
+    api.patch(`/api/users/${id}/permissions`, payload).then((r) => r.data),
+  dashboardWidgets: () =>
+    api.get("/api/dashboard/widgets").then((r) => r.data),
+
   // year-end class promotion
   promotion: () => api.get("/api/promotion").then((r) => r.data),
   promotionPreview: (payload) =>

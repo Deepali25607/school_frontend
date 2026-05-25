@@ -52,13 +52,30 @@ export default function AppLayout() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
-  // Items the user's role grants access to — basis for the Customize modal.
+  // Custom event so any descendant route (Dashboard "Quick action" etc.)
+  // can pop the command palette without prop-drilling state through Outlet.
+  useEffect(() => {
+    const onOpen = (e) => {
+      setPaletteSeed(e?.detail?.seed || "");
+      setPaletteOpen(true);
+    };
+    window.addEventListener("lumina:open-palette", onOpen);
+    return () => window.removeEventListener("lumina:open-palette", onOpen);
+  }, []);
+
+  // Items the user's role grants access to.
   const roleAllowedNav = NAV.filter(
     (n) => n.roles === "*" || n.roles.includes(user?.role)
   );
-  // Items actually rendered in the rail — drops anything the user has hidden.
-  const visibleNav = roleAllowedNav.filter((n) => !sidebarPrefs.isHidden(n.to));
-  const hiddenCount = roleAllowedNav.length - visibleNav.length;
+  // Admin-imposed restrictions (set in Users & Access) cut deeper than the
+  // user's own per-device sidebar customisation — they form the actual
+  // permission ceiling for what this user can see in the UI.
+  const adminHidden = new Set(user?.permissions?.hiddenPaths || []);
+  const adminAllowedNav = roleAllowedNav.filter((n) => !adminHidden.has(n.to));
+  // Items actually rendered in the rail — drops anything the user has chosen
+  // to declutter for themselves on top of the admin ceiling.
+  const visibleNav = adminAllowedNav.filter((n) => !sidebarPrefs.isHidden(n.to));
+  const hiddenCount = adminAllowedNav.length - visibleNav.length;
 
   const onLogout = () => {
     logout();
@@ -177,29 +194,70 @@ export default function AppLayout() {
             )}
           </button>
           <div className="flex items-center gap-3 rounded-xl bg-white/5 p-2.5">
-            <Avatar
-              photoUrl={user?.photoUrl}
-              initials={user?.avatar || "U"}
-              size={36}
-              fallbackClass="from-brand-500 to-accent-pink"
-            />
-            <AnimatePresence>
-              {open && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="min-w-0 flex-1"
-                >
-                  <div className="truncate text-sm font-semibold">
-                    {user?.name}
-                  </div>
-                  <div className="truncate text-[11px] uppercase tracking-wider text-white/50">
-                    {user?.role}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {user?.scope?.studentId ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/app/students/${user.scope.studentId}`)}
+                className="flex flex-1 items-center gap-3 rounded-lg text-left transition hover:bg-white/5"
+                title="Open my profile"
+              >
+                <Avatar
+                  photoUrl={user?.photoUrl}
+                  initials={user?.avatar || "U"}
+                  size={36}
+                  fallbackClass="from-brand-500 to-accent-pink"
+                />
+                <AnimatePresence>
+                  {open && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="min-w-0 flex-1"
+                    >
+                      <div className="truncate text-sm font-semibold">
+                        {user?.name}
+                      </div>
+                      <div className="flex items-center gap-1.5 truncate text-[11px] uppercase tracking-wider text-white/50">
+                        {user?.role}
+                        <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300 ring-1 ring-emerald-400/30">
+                          Grade {user.scope.grade}-{user.scope.section}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-brand-300/80">
+                        View my profile →
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </button>
+            ) : (
+              <>
+                <Avatar
+                  photoUrl={user?.photoUrl}
+                  initials={user?.avatar || "U"}
+                  size={36}
+                  fallbackClass="from-brand-500 to-accent-pink"
+                />
+                <AnimatePresence>
+                  {open && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="min-w-0 flex-1"
+                    >
+                      <div className="truncate text-sm font-semibold">
+                        {user?.name}
+                      </div>
+                      <div className="flex items-center gap-1.5 truncate text-[11px] uppercase tracking-wider text-white/50">
+                        {user?.role}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            )}
             <button
               onClick={onLogout}
               className="rounded-lg p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
@@ -323,7 +381,7 @@ export default function AppLayout() {
       <AnimatePresence>
         {customizeOpen && (
           <CustomizeSidebar
-            navItems={roleAllowedNav}
+            navItems={adminAllowedNav}
             isHidden={sidebarPrefs.isHidden}
             isPinned={sidebarPrefs.isPinned}
             toggle={sidebarPrefs.toggle}

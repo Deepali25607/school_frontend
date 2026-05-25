@@ -108,6 +108,7 @@ export default function StudentProfile() {
 
   const { student, health, discipline, documents, exams, library, hostel, achievements, cafeteria, billing } = data;
   const houseGrad = HOUSE_COLORS[student.house] || "from-brand-500 to-accent-pink";
+  const isBatchmateView = data.viewMode === "batchmate";
 
   return (
     <div className="space-y-5">
@@ -117,6 +118,20 @@ export default function StudentProfile() {
       >
         <ArrowLeft size={14} /> Back
       </button>
+
+      {isBatchmateView && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <div className="font-semibold">Classmate view — limited details</div>
+            <div className="text-[12px] text-amber-200/80">
+              Only public roster info (name, grade, section, house, achievements)
+              is shown for batchmates. Personal info like fees, health,
+              discipline and exam marks stays private.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Hero card */}
       <motion.div
@@ -148,22 +163,28 @@ export default function StudentProfile() {
                 <span>·</span>
                 <span>{student.house} House</span>
               </div>
-              <div className="mt-2 inline-flex items-center gap-2 text-xs text-white/65">
-                <Phone size={12} /> {student.parent} · {student.contact}
-              </div>
+              {!isBatchmateView && student.parent && (
+                <div className="mt-2 inline-flex items-center gap-2 text-xs text-white/65">
+                  <Phone size={12} /> {student.parent} · {student.contact}
+                </div>
+              )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className={`grid gap-3 ${isBatchmateView ? "grid-cols-2 md:grid-cols-2" : "grid-cols-2 md:grid-cols-5"}`}>
             <HeroStat label="Attendance" value={`${student.attendance}%`} icon={CalendarCheck} accent="text-emerald-300" />
-            <HeroStat label="GPA" value={student.gpa} icon={Trophy} accent="text-accent-gold" />
             <HeroStat label="Achievements" value={achievements?.points || 0} icon={Award} accent="text-amber-300" />
-            <HeroStat label="Demerits" value={discipline.demerits} icon={ShieldAlert} accent={discipline.demerits > 5 ? "text-rose-300" : "text-white/85"} />
-            <HeroStat
-              label="Fees"
-              value={student.feeStatus}
-              icon={Wallet}
-              chip={FEE_TONES[student.feeStatus]}
-            />
+            {!isBatchmateView && (
+              <>
+                <HeroStat label="GPA" value={student.gpa} icon={Trophy} accent="text-accent-gold" />
+                <HeroStat label="Demerits" value={discipline.demerits} icon={ShieldAlert} accent={discipline.demerits > 5 ? "text-rose-300" : "text-white/85"} />
+                <HeroStat
+                  label="Fees"
+                  value={student.feeStatus}
+                  icon={Wallet}
+                  chip={FEE_TONES[student.feeStatus]}
+                />
+              </>
+            )}
           </div>
         </div>
       </motion.div>
@@ -173,21 +194,25 @@ export default function StudentProfile() {
         <TabButton active={tab === "overview"} onClick={() => setTab("overview")} icon={Users}>
           Overview
         </TabButton>
-        <TabButton active={tab === "academic"} onClick={() => setTab("academic")} icon={Trophy}>
-          Academic
-        </TabButton>
-        <TabButton active={tab === "wellbeing"} onClick={() => setTab("wellbeing")} icon={HeartPulse}>
-          Wellbeing
-        </TabButton>
-        <TabButton active={tab === "conduct"} onClick={() => setTab("conduct")} icon={ShieldAlert}>
-          Conduct
-        </TabButton>
-        <TabButton active={tab === "records"} onClick={() => setTab("records")} icon={FileText}>
-          Records
-        </TabButton>
-        <TabButton active={tab === "activity"} onClick={() => setTab("activity")} icon={Activity}>
-          Activity
-        </TabButton>
+        {!isBatchmateView && (
+          <>
+            <TabButton active={tab === "academic"} onClick={() => setTab("academic")} icon={Trophy}>
+              Academic
+            </TabButton>
+            <TabButton active={tab === "wellbeing"} onClick={() => setTab("wellbeing")} icon={HeartPulse}>
+              Wellbeing
+            </TabButton>
+            <TabButton active={tab === "conduct"} onClick={() => setTab("conduct")} icon={ShieldAlert}>
+              Conduct
+            </TabButton>
+            <TabButton active={tab === "records"} onClick={() => setTab("records")} icon={FileText}>
+              Records
+            </TabButton>
+            <TabButton active={tab === "activity"} onClick={() => setTab("activity")} icon={Activity}>
+              Activity
+            </TabButton>
+          </>
+        )}
       </div>
 
       {/* Sections */}

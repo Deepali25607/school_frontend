@@ -38,6 +38,7 @@ import {
   ArrowUpFromLine,
   UserCog,
   UsersRound,
+  ShieldCheck,
 } from "lucide-react";
 
 // Single source of truth for the sidebar / settings module list.
@@ -46,7 +47,7 @@ import {
 export const NAV = [
   { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true, roles: "*" },
   { to: "/app/admissions", label: "Admissions", icon: UserPlus, roles: ["admin", "principal"] },
-  { to: "/app/students", label: "Students", icon: Users, roles: ["admin", "principal", "teacher", "accountant", "hr"] },
+  { to: "/app/students", label: "Students", icon: Users, roles: ["admin", "principal", "teacher", "accountant", "hr", "student"] },
   { to: "/app/teachers", label: "Teachers", icon: GraduationCap, roles: ["admin", "principal", "hr"] },
   { to: "/app/staff", label: "Staff Directory", icon: UsersRound, roles: ["admin", "principal", "hr", "accountant"] },
   { to: "/app/attendance", label: "Attendance", icon: CalendarCheck, roles: ["admin", "principal", "teacher", "parent", "student"] },
@@ -83,6 +84,7 @@ export const NAV = [
   { to: "/app/substitutes", label: "Substitutes", icon: UserCog, roles: ["admin", "principal", "hr", "teacher"] },
   { to: "/app/promotion", label: "Year-End Promotion", icon: ArrowUpFromLine, roles: ["admin", "principal"] },
   { to: "/app/reports", label: "Reports", icon: BarChart3, roles: ["admin", "principal", "accountant"] },
+  { to: "/app/access", label: "Users & Access", icon: ShieldCheck, roles: ["admin", "principal"] },
   { to: "/app/audit", label: "Audit Log", icon: ScrollText, roles: ["admin", "principal"] },
   { to: "/app/settings", label: "Settings", icon: Settings, roles: "*" },
 ];

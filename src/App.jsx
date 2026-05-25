@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+import { useTheme } from "./lib/useTheme.js";
 import LogoOrb3D from "./components/fx/LogoOrb3D.jsx";
 
 // Top-level pages — lazy so heavy 3D / charts / animations only load on demand
@@ -55,6 +56,7 @@ const Suggestions = lazy(() => import("./pages/app/Suggestions.jsx"));
 const Promotion = lazy(() => import("./pages/app/Promotion.jsx"));
 const Substitutes = lazy(() => import("./pages/app/Substitutes.jsx"));
 const Staff = lazy(() => import("./pages/app/Staff.jsx"));
+const Access = lazy(() => import("./pages/app/Access.jsx"));
 
 function Splash({ label = "Loading…" }) {
   return (
@@ -90,6 +92,7 @@ function RequireAuth({ children }) {
 }
 
 export default function App() {
+  useTheme(); // keep saved theme applied + watch for system changes
   return (
     <Suspense fallback={<Splash />}>
       <Routes>
@@ -155,6 +158,7 @@ export default function App() {
           <Route path="promotion" element={<Suspense fallback={<RouteFallback />}><Promotion /></Suspense>} />
           <Route path="substitutes" element={<Suspense fallback={<RouteFallback />}><Substitutes /></Suspense>} />
           <Route path="staff" element={<Suspense fallback={<RouteFallback />}><Staff /></Suspense>} />
+          <Route path="access" element={<Suspense fallback={<RouteFallback />}><Access /></Suspense>} />
         </Route>
         {/* Standalone print views — authenticated but render outside the app shell so
             the sidebar/topbar don't appear in the printed output. */}
