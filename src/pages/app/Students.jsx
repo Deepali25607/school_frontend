@@ -14,6 +14,7 @@ import {
   Loader,
   CircleAlert,
   MoreVertical,
+  Bus,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
@@ -309,7 +310,34 @@ function StudentFormModal({ student, onClose, onSaved, onError }) {
     contact: student?.contact || "",
     gpa: student?.gpa || "3.50",
     photoUrl: student?.photoUrl || null,
+    // undefined for legacy students (no field) so an unrelated edit doesn't
+    // wipe their derived assignment; null/object once explicitly set.
+    transport: student?.transport,
   });
+  const { data: routesData } = useApi(endpoints.transportRoutes, []);
+  const routes = routesData?.items || [];
+  const transportOn = !!(form.transport && form.transport.routeId);
+  const selectedRoute = routes.find((r) => r.id === form.transport?.routeId);
+  const routeStops = (selectedRoute?.stops || []).filter((s) => !s.school);
+
+  const toggleTransport = (on) => {
+    if (on) {
+      const r = routes[0];
+      if (!r) return;
+      const firstStop = r.stops.find((s) => !s.school);
+      setForm((f) => ({ ...f, transport: { routeId: r.id, stopName: firstStop?.name || "" } }));
+    } else {
+      setForm((f) => ({ ...f, transport: null }));
+    }
+  };
+  const setRoute = (routeId) => {
+    const r = routes.find((x) => x.id === routeId);
+    const firstStop = r?.stops.find((s) => !s.school);
+    setForm((f) => ({ ...f, transport: { routeId, stopName: firstStop?.name || "" } }));
+  };
+  const setStop = (stopName) =>
+    setForm((f) => ({ ...f, transport: { ...f.transport, stopName } }));
+
   const initials = (form.name || "?")
     .split(/\s+/)
     .map((p) => p[0])
@@ -337,8 +365,8 @@ function StudentFormModal({ student, onClose, onSaved, onError }) {
 
   return (
     <Modal onClose={onClose}>
-      <form onSubmit={onSubmit}>
-        <div className="flex items-center justify-between">
+      <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 px-6 pb-4 pt-6">
           <div>
             <div className="chip">
               <SparklesIcon size={14} className="text-accent-gold" />
@@ -353,7 +381,8 @@ function StudentFormModal({ student, onClose, onSaved, onError }) {
           </button>
         </div>
 
-        <div className="mt-5 mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
           <PhotoUploader
             photoUrl={form.photoUrl}
             initials={initials}
@@ -428,9 +457,63 @@ function StudentFormModal({ student, onClose, onSaved, onError }) {
           <Field label="Contact" className="col-span-2">
             <input value={form.contact} onChange={set("contact")} className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50" placeholder="+91 9XXXXXXXXX" />
           </Field>
+
+          <div className="col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+            <label className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-2 text-sm font-medium text-white/85">
+                <Bus size={15} className="text-sky-300" /> School transport
+              </span>
+              <input
+                type="checkbox"
+                checked={transportOn}
+                onChange={(e) => toggleTransport(e.target.checked)}
+                disabled={routes.length === 0}
+                className="h-4 w-4 accent-sky-500 disabled:opacity-40"
+              />
+            </label>
+            {routes.length === 0 ? (
+              <p className="mt-2 text-[11px] text-white/40">
+                No routes configured yet — add one under Transport first.
+              </p>
+            ) : transportOn ? (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <Field label="Route">
+                  <select
+                    value={form.transport.routeId}
+                    onChange={(e) => setRoute(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50"
+                  >
+                    {routes.map((r) => (
+                      <option key={r.id} value={r.id} className="bg-black">
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Pickup stop">
+                  <select
+                    value={form.transport.stopName}
+                    onChange={(e) => setStop(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50"
+                  >
+                    {routeStops.map((s) => (
+                      <option key={s.name} value={s.name} className="bg-black">
+                        {s.name} · {s.eta}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-white/40">
+                Not using school transport — toggle on to assign a route &amp; stop.
+              </p>
+            )}
+          </div>
+        </div>
         </div>
 
-        <div className="mt-5 flex gap-2">
+        <div className="flex shrink-0 gap-2 border-t border-white/10 px-6 py-4">
           <button
             type="button"
             onClick={onClose}
@@ -456,37 +539,39 @@ function DeleteConfirmModal({ student, onCancel, onConfirm }) {
   const [working, setWorking] = useState(false);
   return (
     <Modal onClose={onCancel}>
-      <div className="flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-rose-500/20 text-rose-300">
-          <Trash2 size={18} />
+      <div className="p-6">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-rose-500/20 text-rose-300">
+            <Trash2 size={18} />
+          </div>
+          <div>
+            <h2 className="font-display text-xl font-semibold">Delete student?</h2>
+            <p className="text-sm text-white/55">{student.name} · {student.id}</p>
+          </div>
         </div>
-        <div>
-          <h2 className="font-display text-xl font-semibold">Delete student?</h2>
-          <p className="text-sm text-white/55">{student.name} · {student.id}</p>
+        <div className="mt-4 rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-xs text-rose-100">
+          This removes the active record. Linked alumni records (if any) stay
+          intact.
         </div>
-      </div>
-      <div className="mt-4 rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-xs text-rose-100">
-        This removes the active record. Linked alumni records (if any) stay
-        intact.
-      </div>
-      <div className="mt-5 flex gap-2">
-        <button
-          onClick={onCancel}
-          className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/10"
-        >
-          Cancel
-        </button>
-        <button
-          disabled={working}
-          onClick={async () => {
-            setWorking(true);
-            await onConfirm();
-          }}
-          className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white shadow shadow-rose-500/20 disabled:opacity-50"
-        >
-          {working ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
-          Delete
-        </button>
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/10"
+          >
+            Cancel
+          </button>
+          <button
+            disabled={working}
+            onClick={async () => {
+              setWorking(true);
+              await onConfirm();
+            }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-rose-500 to-pink-500 px-4 py-2.5 text-sm font-semibold text-white shadow shadow-rose-500/20 disabled:opacity-50"
+          >
+            {working ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
+            Delete
+          </button>
+        </div>
       </div>
     </Modal>
   );
@@ -517,7 +602,7 @@ function Modal({ children, onClose }) {
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.96, y: 12 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg rounded-2xl border border-white/15 bg-[#0d0f24] p-6 shadow-2xl"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#0d0f24] shadow-2xl"
       >
         {children}
       </motion.div>
@@ -565,7 +650,7 @@ function AttendanceBar({ pct }) {
   );
 }
 
-export function PageHeader({ eyebrow, title, subtitle }) {
+export function PageHeader({ eyebrow, title, subtitle, actions }) {
   return (
     <div className="flex items-end justify-between gap-4">
       <div>
@@ -578,6 +663,7 @@ export function PageHeader({ eyebrow, title, subtitle }) {
         </h1>
         {subtitle && <p className="mt-1 text-white/65">{subtitle}</p>}
       </div>
+      {actions && <div className="shrink-0">{actions}</div>}
     </div>
   );
 }

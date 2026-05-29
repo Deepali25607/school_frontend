@@ -102,8 +102,12 @@ export default function Documents() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile icon={FileText} label="Total" value={loading ? "—" : summary?.total} tint="from-brand-500/30" />
         <StatTile icon={Clock} label="Pending" value={loading ? "—" : summary?.pending} tint="from-amber-500/30" pulse={summary?.pending > 0} />
-        <StatTile icon={CheckCircle2} label="Issued" value={loading ? "—" : summary?.Issued} tint="from-emerald-500/30" />
-        <StatTile icon={XCircle} label="Rejected" value={loading ? "—" : summary?.Rejected} tint="from-rose-500/30" />
+        <button type="button" onClick={() => setStatus(status === "Issued" ? "all" : "Issued")} className={`block w-full rounded-2xl text-left transition-all ${status === "Issued" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={CheckCircle2} label="Issued" value={loading ? "—" : summary?.Issued} tint="from-emerald-500/30" />
+        </button>
+        <button type="button" onClick={() => setStatus(status === "Rejected" ? "all" : "Rejected")} className={`block w-full rounded-2xl text-left transition-all ${status === "Rejected" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={XCircle} label="Rejected" value={loading ? "—" : summary?.Rejected} tint="from-rose-500/30" />
+        </button>
       </div>
 
       {/* Document type grid — clickable to prefill the request modal */}

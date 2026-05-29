@@ -27,12 +27,17 @@ import {
   Smartphone,
   Building2,
   ScrollText,
+  Percent,
+  AlertTriangle,
+  RotateCcw,
+  Trash2,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
 import { useRealtime } from "../../lib/useRealtime.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
+import Portal from "../../components/ui/Portal.jsx";
 import { PageHeader } from "./Students.jsx";
 
 const STATUS_TONES = {
@@ -166,6 +171,7 @@ export default function Fees() {
           {[
             { k: "ledger", label: "Ledger" },
             { k: "payments", label: "Payments" },
+            { k: "adjustments", label: "Discounts · Fines · Refunds" },
             { k: "structures", label: "Fee structures" },
             { k: "scholarships", label: "Scholarships" },
           ].map((t) => (
@@ -193,6 +199,8 @@ export default function Fees() {
         )}
 
         {tab === "payments" && <PaymentsTab />}
+
+        {tab === "adjustments" && <AdjustmentsTab canManage={canCollect} />}
 
         {tab === "structures" && (
           <div className="text-sm text-white/65">
@@ -319,8 +327,8 @@ function PaymentsTab() {
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Tile label="Today" value={summary.todayCount} amount={`₹${summary.todayAmount.toLocaleString()}`} tone="text-emerald-300" />
           <Tile label="Last 7 days" amount={`₹${(summary.last7dAmount / 1000).toFixed(1)}k`} value={summary.success} tone="text-brand-300" />
-          <Tile label="Pending" value={summary.pending} tone={summary.pending > 0 ? "text-amber-300" : "text-white/85"} />
-          <Tile label="Failed" value={summary.failed} tone="text-rose-300" />
+          <Tile label="Pending" value={summary.pending} tone={summary.pending > 0 ? "text-amber-300" : "text-white/85"} active={status === "Pending"} onClick={() => setStatus(status === "Pending" ? "all" : "Pending")} />
+          <Tile label="Failed" value={summary.failed} tone="text-rose-300" active={status === "Failed"} onClick={() => setStatus(status === "Failed" ? "all" : "Failed")} />
         </div>
       )}
 
@@ -365,14 +373,25 @@ function PaymentsTab() {
   );
 }
 
-function Tile({ label, value, amount, tone }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+function Tile({ label, value, amount, tone, onClick, active }) {
+  const base = `rounded-lg border p-3 text-left transition-all ${
+    active ? "border-brand-400/50 bg-white/[0.06] ring-1 ring-brand-400/40" : "border-white/10 bg-white/[0.03]"
+  }`;
+  const inner = (
+    <>
       <div className="text-[10px] uppercase tracking-wider text-white/55">{label}</div>
       <div className={`font-display text-xl font-bold ${tone || ""}`}>{value}</div>
       {amount && <div className="text-[10px] text-white/55">{amount}</div>}
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${base} w-full hover:bg-white/[0.07]`}>
+        {inner}
+      </button>
+    );
+  }
+  return <div className={base}>{inner}</div>;
 }
 
 function PaymentRow({ p, idx }) {
@@ -430,6 +449,12 @@ function PaymentRow({ p, idx }) {
 }
 
 function PaymentModal({ student, onClose, onSuccess }) {
+  const { user } = useAuth();
+  // Parents go through the Razorpay-style order/capture flow with a mock
+  // gateway sub-screen. Admin / accountant keep the direct-record path so
+  // they can still log offline cash payments without a fake redirect.
+  const useGatewayFlow = user?.role === "parent";
+
   const [billing, setBilling] = useState(null);
   const [studentQuery, setStudentQuery] = useState("");
   const [students, setStudents] = useState([]);
@@ -444,6 +469,10 @@ function PaymentModal({ student, onClose, onSuccess }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [result, setResult] = useState(null);
+
+  // Order/capture intermediate state. When set, the modal renders the mock
+  // gateway screen instead of the form.
+  const [order, setOrder] = useState(null);
 
   // Load billing details once a student is selected
   useEffect(() => {
@@ -508,19 +537,29 @@ function PaymentModal({ student, onClose, onSuccess }) {
     setBusy(true);
     setErr(null);
     try {
-      const res = await endpoints.feesPaymentAdd({
-        studentId: selectedStudent.id,
-        amount,
-        mode: form.mode,
-        paidBy: form.paidBy,
-        notes: form.notes,
-      });
-      setResult(res);
-      if (res.status === "Success") {
-        // Auto-success after a moment so the modal shows the receipt link
-        setTimeout(() => {
-          onSuccess();
-        }, 1500);
+      if (useGatewayFlow) {
+        // Step 1: create a pending order. The mock gateway screen takes over.
+        const ord = await endpoints.feesOrderCreate({
+          studentId: selectedStudent.id,
+          amount,
+          mode: form.mode,
+          paidBy: form.paidBy,
+          notes: form.notes,
+        });
+        setOrder(ord);
+      } else {
+        // Admin / accountant direct path — offline cash, no gateway.
+        const res = await endpoints.feesPaymentAdd({
+          studentId: selectedStudent.id,
+          amount,
+          mode: form.mode,
+          paidBy: form.paidBy,
+          notes: form.notes,
+        });
+        setResult(res);
+        if (res.status === "Success") {
+          setTimeout(() => onSuccess(), 1500);
+        }
       }
     } catch (e) {
       setErr(e.response?.data?.error || e.message);
@@ -528,6 +567,149 @@ function PaymentModal({ student, onClose, onSuccess }) {
       setBusy(false);
     }
   };
+
+  // Mock-gateway actions ----------
+  const captureOrder = async (forceFail = false) => {
+    if (!order) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await endpoints.feesOrderCapture(order.id, { forceFail });
+      // `r.payment` is null when the order is forced to fail.
+      setResult(
+        r.payment || {
+          status: "Failed",
+          studentId: order.studentId,
+          amount: order.amount,
+          mode: order.mode,
+        }
+      );
+      setOrder(null);
+      if (r.payment) {
+        setTimeout(() => onSuccess(), 1500);
+      }
+    } catch (e) {
+      setErr(e.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const abandonOrder = async () => {
+    if (!order) return onClose();
+    try {
+      await endpoints.feesOrderCancel(order.id);
+    } catch {
+      // best effort — closing is more important than the cancel call
+    }
+    setOrder(null);
+    onClose();
+  };
+
+  // Mock gateway sub-screen — shown after the parent confirms the form and
+  // an order has been created. In a real integration this is where the
+  // Razorpay / Stripe sheet would open; here it's a styled placeholder with
+  // explicit "Confirm" and "Simulate failure" buttons.
+  if (order) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md"
+        onClick={abandonOrder}
+      >
+        <motion.div
+          initial={{ scale: 0.9, y: 10 }}
+          animate={{ scale: 1, y: 0 }}
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#0d0f24] shadow-2xl"
+        >
+          {/* Gateway header bar */}
+          <div className="flex items-center justify-between border-b border-white/5 bg-gradient-to-r from-brand-500/20 via-accent-violet/20 to-accent-pink/20 px-5 py-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white">
+              <CreditCard size={14} className="text-brand-200" /> Lumina Pay
+              <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] uppercase tracking-wider text-emerald-200 ring-1 ring-emerald-400/30">
+                Secure
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={abandonOrder}
+              className="rounded p-1 text-white/55 hover:bg-white/10 hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="space-y-3 px-5 py-4 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-white/55">Order</span>
+              <span className="font-mono text-[11px] text-white/75">
+                {order.id}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-white/55">Amount</span>
+              <span className="font-display text-2xl font-bold text-white">
+                ₹{order.amount.toLocaleString("en-IN")}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-white/55">
+              <span>Mode</span>
+              <span>{order.mode}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs text-white/55">
+              <span>Paying for</span>
+              <span className="text-white/85">
+                {selectedStudent?.name} · {selectedStudent?.id}
+              </span>
+            </div>
+            <div className="rounded-lg border border-white/5 bg-white/[0.03] p-3 text-[11px] text-white/45">
+              Mock gateway · no real charge happens. The "Pay" button captures
+              the order and posts a confirmed payment record to the school.
+              "Simulate failure" routes the same order through the failure
+              path so you can see how a declined transaction looks.
+            </div>
+          </div>
+
+          {err && (
+            <div className="mx-5 mb-3 rounded-lg border border-rose-400/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+              {err}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-2 border-t border-white/5 px-5 py-3">
+            <button
+              type="button"
+              onClick={() => captureOrder(true)}
+              disabled={busy}
+              className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200 hover:bg-rose-500/20 disabled:opacity-50"
+            >
+              Simulate failure
+            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={abandonOrder}
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/75 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => captureOrder(false)}
+                disabled={busy}
+                className="rounded-lg bg-gradient-to-r from-brand-500 to-accent-violet px-4 py-2 text-xs font-semibold text-white shadow-lg disabled:opacity-50"
+              >
+                {busy ? "Processing…" : `Pay ₹${order.amount.toLocaleString("en-IN")}`}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+    );
+  }
 
   // Success / failure card after a payment attempt
   if (result) {
@@ -785,5 +967,318 @@ function Field({ label, children }) {
       <div className="mb-1 text-[11px] uppercase tracking-wider text-white/55">{label}</div>
       {children}
     </label>
+  );
+}
+
+const ADJ_TYPE_TONES = {
+  Discount: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+  Fine: "bg-rose-500/15 text-rose-300 ring-rose-400/30",
+  Refund: "bg-brand-500/15 text-brand-300 ring-brand-400/30",
+};
+const ADJ_STATUS_TONES = {
+  Active: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+  Revoked: "bg-white/10 text-white/60 ring-white/20",
+  Pending: "bg-amber-500/15 text-amber-300 ring-amber-400/30",
+  Paid: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
+  Waived: "bg-white/10 text-white/60 ring-white/20",
+  Requested: "bg-amber-500/15 text-amber-300 ring-amber-400/30",
+  Approved: "bg-brand-500/15 text-brand-300 ring-brand-400/30",
+  Rejected: "bg-rose-500/15 text-rose-300 ring-rose-400/30",
+};
+const inr = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
+
+// Next statuses an adjustment can transition to, by type + current status.
+function nextStatuses(type, status) {
+  const map = {
+    Discount: { Active: ["Revoked"], Revoked: ["Active"] },
+    Fine: { Pending: ["Paid", "Waived"], Paid: [], Waived: ["Pending"] },
+    Refund: {
+      Requested: ["Approved", "Rejected"],
+      Approved: ["Paid", "Rejected"],
+      Paid: [],
+      Rejected: ["Requested"],
+    },
+  };
+  return map[type]?.[status] || [];
+}
+
+function AdjustmentsTab({ canManage }) {
+  const { data, loading, error, refetch } = useApi(endpoints.feeAdjustments, []);
+  const [type, setType] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [adding, setAdding] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  useRealtime("fees.changed", () => refetch());
+
+  const items = (data?.items || []).filter(
+    (a) => (type === "all" || a.type === type) && (status === "all" || a.status === status)
+  );
+  const s = data?.summary;
+
+  const transition = async (id, next) => {
+    setBusyId(id);
+    try {
+      await endpoints.feeAdjustmentSetStatus(id, next);
+      refetch();
+    } catch (e) {
+      alert(e.response?.data?.error || e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const del = async (id) => {
+    if (!confirm("Delete this adjustment?")) return;
+    setBusyId(id);
+    try {
+      await endpoints.feeAdjustmentDelete(id);
+      refetch();
+    } catch (e) {
+      alert(e.response?.data?.error || e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <MiniStat icon={Percent} label="Active discounts" value={s ? inr(s.discountTotal) : "—"} sub={s ? `${s.discountCount} students` : ""} tint="from-emerald-500/30 to-emerald-400/10" active={type === "Discount"} onClick={() => setType(type === "Discount" ? "all" : "Discount")} />
+        <MiniStat icon={AlertTriangle} label="Fines outstanding" value={s ? inr(s.fineOutstanding) : "—"} sub={s ? `${s.fineCount} unpaid` : ""} tint="from-rose-500/30 to-rose-400/10" active={type === "Fine"} onClick={() => setType(type === "Fine" ? "all" : "Fine")} />
+        <MiniStat icon={RotateCcw} label="Refunds in progress" value={s ? inr(s.refundPending) : "—"} sub={s ? `${s.refundCount} open` : ""} tint="from-brand-500/30 to-accent-violet/20" active={type === "Refund"} onClick={() => setType(type === "Refund" ? "all" : "Refund")} />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={type} onChange={(e) => setType(e.target.value)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm outline-none">
+          <option value="all">All types</option>
+          {(data?.types || []).map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-sm outline-none">
+          <option value="all">All statuses</option>
+          {[...new Set(Object.values(data?.statusFlow || {}).flat())].map((st) => <option key={st} value={st}>{st}</option>)}
+        </select>
+        {canManage && (
+          <button onClick={() => setAdding(true)} className="btn-primary ml-auto px-3 py-1.5 text-sm">
+            <Plus size={14} /> Add adjustment
+          </button>
+        )}
+      </div>
+
+      {error && <ErrorState error={error} onRetry={refetch} />}
+
+      {loading ? (
+        <Skeleton className="h-64" />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-white/[0.03] text-left text-[11px] uppercase tracking-wider text-white/55">
+              <tr>
+                <th className="px-4 py-3">Student</th>
+                <th className="px-4 py-3">Type</th>
+                <th className="px-4 py-3">Reason</th>
+                <th className="px-4 py-3 text-right">Amount</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-white/40">No adjustments</td></tr>
+              ) : (
+                items.map((a) => (
+                  <tr key={a.id} className="border-t border-white/5 hover:bg-white/[0.025]">
+                    <td className="px-4 py-3">
+                      <Link to={`/app/students/${a.studentId}`} className="font-medium hover:text-brand-300">{a.studentName}</Link>
+                      <div className="text-[10px] font-mono text-white/40">{a.studentId}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ${ADJ_TYPE_TONES[a.type]}`}>{a.type}</span>
+                    </td>
+                    <td className="px-4 py-3 text-white/70">{a.reason}</td>
+                    <td className="px-4 py-3 text-right font-mono">{inr(a.amount)}</td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ${ADJ_STATUS_TONES[a.status]}`}>{a.status}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1.5">
+                        {canManage && nextStatuses(a.type, a.status).map((next) => (
+                          <button key={next} disabled={busyId === a.id} onClick={() => transition(a.id, next)} className="rounded-md bg-white/5 px-2 py-1 text-[11px] font-medium text-white/75 ring-1 ring-white/10 hover:bg-white/10 disabled:opacity-50">
+                            {next}
+                          </button>
+                        ))}
+                        {canManage && (
+                          <button disabled={busyId === a.id} onClick={() => del(a.id)} className="rounded-md bg-rose-500/10 px-2 py-1 text-[11px] font-medium text-rose-300 ring-1 ring-rose-400/20 hover:bg-rose-500/20 disabled:opacity-50">
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {adding && (
+          <AddAdjustmentModal
+            types={data?.types || []}
+            reasons={data?.reasons || {}}
+            onClose={() => setAdding(false)}
+            onAdded={() => { setAdding(false); refetch(); }}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function MiniStat({ icon: Icon, label, value, sub, tint, onClick, active }) {
+  const inner = (
+    <>
+      <div className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${tint} blur-2xl`} />
+      <div className="relative flex items-center justify-between">
+        <div>
+          <div className="text-xs uppercase tracking-wider text-white/55">{label}</div>
+          <div className="stat-num glow-text">{value}</div>
+          {sub && <div className="mt-0.5 text-[11px] text-white/45">{sub}</div>}
+        </div>
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 ring-1 ring-white/10">
+          <Icon size={18} />
+        </div>
+      </div>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className={`card relative w-full overflow-hidden text-left transition-all hover:bg-white/[0.06] ${
+          active ? "ring-1 ring-brand-400/50" : ""
+        }`}
+      >
+        {inner}
+      </button>
+    );
+  }
+  return <div className="card relative overflow-hidden">{inner}</div>;
+}
+
+function AddAdjustmentModal({ types, reasons, onClose, onAdded }) {
+  const [studentQuery, setStudentQuery] = useState("");
+  const [students, setStudents] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [type, setType] = useState(types[0] || "Discount");
+  const [form, setForm] = useState({ reason: "", amount: "", note: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      if (!studentQuery.trim()) { setStudents([]); return; }
+      try {
+        const res = await endpoints.students({ q: studentQuery });
+        if (!cancelled) setStudents(res.items.slice(0, 8));
+      } catch { if (!cancelled) setStudents([]); }
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [studentQuery]);
+
+  const reasonList = reasons[type] || [];
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!selected) { setErr("Pick a student first"); return; }
+    const amount = Number(form.amount);
+    if (!amount || amount <= 0) { setErr("Enter a valid amount"); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      await endpoints.feeAdjustmentAdd({
+        studentId: selected.id,
+        type,
+        reason: form.reason || reasonList[0],
+        amount,
+        note: form.note || undefined,
+      });
+      onAdded();
+    } catch (e) {
+      setErr(e.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Portal>
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur"
+      onClick={onClose}
+    >
+      <motion.form
+        initial={{ scale: 0.95, y: 10 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 10 }}
+        onClick={(e) => e.stopPropagation()} onSubmit={submit}
+        className="glass-card relative w-full max-w-md p-6"
+      >
+        <button type="button" onClick={onClose} className="absolute right-3 top-3 rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white">
+          <X size={16} />
+        </button>
+        <div className="mb-1 text-xs uppercase tracking-[0.2em] text-white/55">Fee adjustment</div>
+        <div className="font-display text-xl font-bold">New discount / fine / refund</div>
+
+        <div className="mt-5 space-y-3">
+          <Field label="Student">
+            {selected ? (
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                <span>{selected.name} <span className="text-white/40">· {selected.id}</span></span>
+                <button type="button" onClick={() => { setSelected(null); setStudentQuery(""); }} className="text-white/50 hover:text-white"><X size={14} /></button>
+              </div>
+            ) : (
+              <>
+                <input value={studentQuery} onChange={(e) => setStudentQuery(e.target.value)} placeholder="Search student name or ID…" className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-brand-400/60 focus:bg-white/10" />
+                {students.length > 0 && (
+                  <div className="mt-1 max-h-40 overflow-y-auto rounded-xl border border-white/10 bg-[#0d0d24]">
+                    {students.map((st) => (
+                      <button type="button" key={st.id} onClick={() => { setSelected(st); setStudents([]); }} className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-white/5">
+                        <span>{st.name}</span>
+                        <span className="text-[11px] text-white/40">{st.grade}-{st.section}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Type">
+              <select value={type} onChange={(e) => { setType(e.target.value); setForm((p) => ({ ...p, reason: "" })); }} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none">
+                {types.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Amount (₹)">
+              <input type="number" min="1" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-brand-400/60 focus:bg-white/10" required />
+            </Field>
+          </div>
+          <Field label="Reason">
+            <select value={form.reason} onChange={(e) => setForm((p) => ({ ...p, reason: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none">
+              {reasonList.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </Field>
+          <Field label="Note (optional)">
+            <input value={form.note} onChange={(e) => setForm((p) => ({ ...p, note: e.target.value }))} className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-brand-400/60 focus:bg-white/10" />
+          </Field>
+        </div>
+
+        {err && <div className="mt-3 rounded-lg bg-rose-500/15 px-3 py-2 text-xs text-rose-300 ring-1 ring-rose-400/30">{err}</div>}
+
+        <button disabled={busy} className="btn-primary mt-5 w-full">{busy ? "Saving…" : "Create adjustment"}</button>
+      </motion.form>
+    </motion.div>
+    </Portal>
   );
 }

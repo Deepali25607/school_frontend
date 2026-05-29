@@ -44,10 +44,18 @@ export default function Admissions() {
   const { data, loading, error, refetch } = useApi(endpoints.admissions, []);
   const [selected, setSelected] = useState(null);
   const [adding, setAdding] = useState(false);
+  const [focus, setFocus] = useState("all"); // narrows which stage columns show, driven by KPI cards
   useRealtime("admissions.changed", () => refetch());
 
   const stages = data?.stages || [];
   const board = data?.board || {};
+
+  const visibleStages = useMemo(() => {
+    if (focus === "pipeline") return stages.filter((s) => !["Enrolled", "Rejected"].includes(s));
+    if (focus === "enrolled") return stages.filter((s) => s === "Enrolled");
+    if (focus === "rejected") return stages.filter((s) => s === "Rejected");
+    return stages;
+  }, [stages, focus]);
 
   const counts = useMemo(() => {
     const c = {};
@@ -84,15 +92,33 @@ export default function Admissions() {
       {error && <ErrorState error={error} onRetry={refetch} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Total applicants" value={loading ? "—" : totals.total} tint="from-brand-500/30" />
-        <StatTile label="In pipeline" value={loading ? "—" : totals.inPipeline} tint="from-accent-violet/30" />
-        <StatTile label="Enrolled" value={loading ? "—" : totals.enrolled} tint="from-accent-gold/30" />
-        <StatTile label="Rejected" value={loading ? "—" : totals.rejected} tint="from-rose-500/30" />
+        <button type="button" onClick={() => setFocus("all")} className={`block w-full rounded-2xl text-left transition-all ${focus === "all" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="Total applicants" value={loading ? "—" : totals.total} tint="from-brand-500/30" />
+        </button>
+        <button type="button" onClick={() => setFocus(focus === "pipeline" ? "all" : "pipeline")} className={`block w-full rounded-2xl text-left transition-all ${focus === "pipeline" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="In pipeline" value={loading ? "—" : totals.inPipeline} tint="from-accent-violet/30" />
+        </button>
+        <button type="button" onClick={() => setFocus(focus === "enrolled" ? "all" : "enrolled")} className={`block w-full rounded-2xl text-left transition-all ${focus === "enrolled" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="Enrolled" value={loading ? "—" : totals.enrolled} tint="from-accent-gold/30" />
+        </button>
+        <button type="button" onClick={() => setFocus(focus === "rejected" ? "all" : "rejected")} className={`block w-full rounded-2xl text-left transition-all ${focus === "rejected" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="Rejected" value={loading ? "—" : totals.rejected} tint="from-rose-500/30" />
+        </button>
       </div>
 
       <div className="card flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="text-xs text-white/55">
-          Click any card to view details · Use the stage button to advance an applicant
+        <div className="flex items-center gap-2 text-xs text-white/55">
+          {focus === "all" ? (
+            "Click any card to view details · Use the stage button to advance an applicant"
+          ) : (
+            <button
+              type="button"
+              onClick={() => setFocus("all")}
+              className="inline-flex items-center gap-1 rounded-lg bg-brand-500/15 px-3 py-1.5 text-brand-200 ring-1 ring-brand-400/30 hover:bg-brand-500/25"
+            >
+              Focus: {focus === "pipeline" ? "In pipeline" : focus === "enrolled" ? "Enrolled" : "Rejected"} <X size={13} />
+            </button>
+          )}
         </div>
         <button onClick={() => setAdding(true)} className="btn-primary px-4 py-2 text-sm">
           <Plus size={14} /> New enquiry
@@ -107,7 +133,7 @@ export default function Admissions() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-          {stages.map((s, i) => (
+          {visibleStages.map((s, i) => (
             <KanbanColumn
               key={s}
               stage={s}

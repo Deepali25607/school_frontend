@@ -49,6 +49,22 @@ export const endpoints = {
     api.patch("/api/auth/me", payload).then((r) => r.data),
   changePassword: (payload) =>
     api.post("/api/auth/change-password", payload).then((r) => r.data),
+  forgotPassword: (email) =>
+    api.post("/api/auth/forgot-password", { email }).then((r) => r.data),
+  resetPasswordCheck: (token) =>
+    api.get(`/api/auth/reset-password/${encodeURIComponent(token)}`).then((r) => r.data),
+  resetPassword: (token, newPassword) =>
+    api.post("/api/auth/reset-password", { token, newPassword }).then((r) => r.data),
+
+  // two-factor authentication (BRD §12)
+  twoFactorLogin: (challengeToken, code) =>
+    api.post("/api/auth/2fa/login", { challengeToken, code }).then((r) => r.data),
+  twoFactorSetup: () =>
+    api.post("/api/auth/2fa/setup").then((r) => r.data),
+  twoFactorEnable: (code) =>
+    api.post("/api/auth/2fa/enable", { code }).then((r) => r.data),
+  twoFactorDisable: (password) =>
+    api.post("/api/auth/2fa/disable", { password }).then((r) => r.data),
 
   // dashboard
   dashboard: () => api.get("/api/dashboard/summary").then((r) => r.data),
@@ -59,6 +75,8 @@ export const endpoints = {
   student: (id) => api.get(`/api/students/${id}`).then((r) => r.data),
   studentProfile: (id) =>
     api.get(`/api/students/${id}/profile`).then((r) => r.data),
+  studentReportCard: (id, params) =>
+    api.get(`/api/students/${id}/report-card`, { params }).then((r) => r.data),
   studentAdd: (payload) =>
     api.post("/api/students", payload).then((r) => r.data),
   studentUpdate: (id, payload) =>
@@ -94,6 +112,30 @@ export const endpoints = {
   feesReceipt: (id) =>
     api.get(`/api/fees/payments/${id}/receipt`).then((r) => r.data),
 
+  // fee adjustments — discounts / fines / refunds (BRD 7.7)
+  feeAdjustments: (params) =>
+    api.get("/api/fees/adjustments", { params }).then((r) => r.data),
+  feeAdjustmentAdd: (payload) =>
+    api.post("/api/fees/adjustments", payload).then((r) => r.data),
+  feeAdjustmentSetStatus: (id, status) =>
+    api.patch(`/api/fees/adjustments/${id}`, { status }).then((r) => r.data),
+  feeAdjustmentDelete: (id) =>
+    api.delete(`/api/fees/adjustments/${id}`).then((r) => r.data),
+
+  // Payment-order flow (Razorpay-style two-step)
+  feesOrderCreate: (payload) =>
+    api.post("/api/fees/payments/order", payload).then((r) => r.data),
+  feesOrder: (id) =>
+    api.get(`/api/fees/payments/order/${id}`).then((r) => r.data),
+  feesOrderCapture: (id, payload) =>
+    api
+      .post(`/api/fees/payments/order/${id}/capture`, payload || {})
+      .then((r) => r.data),
+  feesOrderCancel: (id) =>
+    api.post(`/api/fees/payments/order/${id}/cancel`).then((r) => r.data),
+  feesOrders: (params) =>
+    api.get("/api/fees/payments/orders", { params }).then((r) => r.data),
+
   // exams
   exams: () => api.get("/api/exams").then((r) => r.data),
   exam: (id) => api.get(`/api/exams/${id}`).then((r) => r.data),
@@ -113,6 +155,10 @@ export const endpoints = {
     api.delete(`/api/exams/${id}/papers/${subject}`).then((r) => r.data),
   results: (studentId) =>
     api.get(`/api/results/${studentId}`).then((r) => r.data),
+  hallTicket: (examId, studentId) =>
+    api.get(`/api/exams/${examId}/hall-ticket/${studentId}`).then((r) => r.data),
+  hallTickets: (examId) =>
+    api.get(`/api/exams/${examId}/hall-tickets`).then((r) => r.data),
 
   // timetable
   timetable: (params) =>
@@ -127,20 +173,60 @@ export const endpoints = {
     api
       .post("/api/timetable/clear-class", { grade, section })
       .then((r) => r.data),
+  timetableConflicts: () =>
+    api.get("/api/timetable/conflicts").then((r) => r.data),
+  timetableCheckCell: (params) =>
+    api.get("/api/timetable/check", { params }).then((r) => r.data),
 
   // library
   libraryBooks: (params) =>
     api.get("/api/library/books", { params }).then((r) => r.data),
+  libraryBookByBarcode: (code) =>
+    api.get(`/api/library/books/by-barcode/${encodeURIComponent(code)}`).then((r) => r.data),
   libraryIssues: () => api.get("/api/library/issues").then((r) => r.data),
   libraryIssue: (payload) =>
     api.post("/api/library/issue", payload).then((r) => r.data),
   libraryReturn: (issueId) =>
     api.post(`/api/library/return/${issueId}`).then((r) => r.data),
+  libraryReservations: (params) =>
+    api.get("/api/library/reservations", { params }).then((r) => r.data),
+  libraryBookQueue: (bookId) =>
+    api.get(`/api/library/books/${bookId}/queue`).then((r) => r.data),
+  libraryReserve: (payload) =>
+    api.post("/api/library/reservations", payload).then((r) => r.data),
+  libraryReservationCancel: (id) =>
+    api.delete(`/api/library/reservations/${id}`).then((r) => r.data),
 
   // payroll
   payroll: (params) =>
     api.get("/api/payroll", { params }).then((r) => r.data),
   payrollStaff: (id) => api.get(`/api/payroll/${id}`).then((r) => r.data),
+  payrollUpdate: (id, patch) =>
+    api.patch(`/api/payroll/${id}`, patch).then((r) => r.data),
+  payrollBulk: (payload) =>
+    api.post("/api/payroll/bulk", payload).then((r) => r.data),
+
+  // payroll processing — runs, payslips, bank report (BRD 7.8)
+  payrollRuns: () => api.get("/api/payroll/runs").then((r) => r.data),
+  payrollRun: (id) => api.get(`/api/payroll/runs/${id}`).then((r) => r.data),
+  payrollRunCreate: (month) =>
+    api.post("/api/payroll/runs", { month }).then((r) => r.data),
+  payrollRunAction: (id, action) =>
+    api.patch(`/api/payroll/runs/${id}`, { action }).then((r) => r.data),
+  payrollRunDelete: (id) =>
+    api.delete(`/api/payroll/runs/${id}`).then((r) => r.data),
+  payrollBankReport: (id) =>
+    api.get(`/api/payroll/runs/${id}/bank-report`).then((r) => r.data),
+  payrollPayslip: (runId, employeeId) =>
+    api.get(`/api/payroll/runs/${runId}/payslip/${employeeId}`).then((r) => r.data),
+
+  // salary advances (BRD 7.8)
+  payrollAdvances: (params) =>
+    api.get("/api/payroll/advances", { params }).then((r) => r.data),
+  payrollAdvanceGrant: (payload) =>
+    api.post("/api/payroll/advances", payload).then((r) => r.data),
+  payrollAdvanceCancel: (id) =>
+    api.post(`/api/payroll/advances/${id}/cancel`).then((r) => r.data),
 
   // transport
   transportRoutes: () =>
@@ -197,6 +283,18 @@ export const endpoints = {
   hostelEvict: (roomId, payload) =>
     api.post(`/api/hostel/rooms/${roomId}/evict`, payload).then((r) => r.data),
 
+  // hostel warden & mess management (BRD 7.15)
+  hostelWardens: () => api.get("/api/hostel/wardens").then((r) => r.data),
+  hostelWardenAdd: (payload) =>
+    api.post("/api/hostel/wardens", payload).then((r) => r.data),
+  hostelWardenUpdate: (id, patch) =>
+    api.patch(`/api/hostel/wardens/${id}`, patch).then((r) => r.data),
+  hostelWardenDelete: (id) =>
+    api.delete(`/api/hostel/wardens/${id}`).then((r) => r.data),
+  hostelMess: () => api.get("/api/hostel/mess").then((r) => r.data),
+  hostelMessSet: (day, meal, dish) =>
+    api.patch("/api/hostel/mess", { day, meal, dish }).then((r) => r.data),
+
   // events
   events: (params) => api.get("/api/events", { params }).then((r) => r.data),
   eventAdd: (payload) => api.post("/api/events", payload).then((r) => r.data),
@@ -205,8 +303,40 @@ export const endpoints = {
   // inventory
   inventory: (params) =>
     api.get("/api/inventory", { params }).then((r) => r.data),
+  inventoryItemAdd: (payload) =>
+    api.post("/api/inventory", payload).then((r) => r.data),
+  inventoryCategoryAdd: (name) =>
+    api.post("/api/inventory/categories", { name }).then((r) => r.data),
+  inventoryItemUpdate: (id, payload) =>
+    api.patch(`/api/inventory/${id}`, payload).then((r) => r.data),
+  inventoryItemDelete: (id) =>
+    api.delete(`/api/inventory/${id}`).then((r) => r.data),
   inventoryAdjust: (id, payload) =>
     api.post(`/api/inventory/${id}/adjust`, payload).then((r) => r.data),
+  inventoryVendors: () =>
+    api.get("/api/inventory/vendors").then((r) => r.data),
+  inventoryAlerts: () =>
+    api.get("/api/inventory/alerts").then((r) => r.data),
+  inventoryPurchases: (params) =>
+    api.get("/api/inventory/purchases", { params }).then((r) => r.data),
+  inventoryPurchaseAdd: (payload) =>
+    api.post("/api/inventory/purchases", payload).then((r) => r.data),
+  inventoryPurchaseAction: (id, action) =>
+    api.patch(`/api/inventory/purchases/${id}`, { action }).then((r) => r.data),
+
+  // expenses (BRD 7.17)
+  expenses: (params) =>
+    api.get("/api/expenses", { params }).then((r) => r.data),
+  expenseAdd: (payload) =>
+    api.post("/api/expenses", payload).then((r) => r.data),
+  expenseSetStatus: (id, payload) =>
+    api.patch(`/api/expenses/${id}`, payload).then((r) => r.data),
+  expenseReport: (month) =>
+    api.get("/api/expenses/report", { params: month ? { month } : {} }).then((r) => r.data),
+  expenseBudgets: () =>
+    api.get("/api/expenses/budgets").then((r) => r.data),
+  expenseSetBudget: (category, amount) =>
+    api.put(`/api/expenses/budgets/${encodeURIComponent(category)}`, { amount }).then((r) => r.data),
 
   // leave
   leave: (params) => api.get("/api/leave", { params }).then((r) => r.data),
@@ -238,6 +368,16 @@ export const endpoints = {
 
   // audit
   audit: (params) => api.get("/api/audit", { params }).then((r) => r.data),
+  auditActors: () => api.get("/api/audit/actors").then((r) => r.data),
+  auditExport: (params) =>
+    api
+      .get("/api/audit/export.csv", { params, responseType: "blob" })
+      .then((r) => ({
+        blob: r.data,
+        filename:
+          /filename="?([^";]+)/.exec(r.headers["content-disposition"] || "")?.[1] ||
+          "audit-log.csv",
+      })),
 
   // documents & certificates
   documents: (params) =>
@@ -278,6 +418,22 @@ export const endpoints = {
     api.get(`/api/cafeteria/preferences/${studentId}`).then((r) => r.data),
   cafeteriaPrefUpdate: (studentId, patch) =>
     api.patch(`/api/cafeteria/preferences/${studentId}`, patch).then((r) => r.data),
+  cafeteriaOrders: (params) =>
+    api.get("/api/cafeteria/orders", { params }).then((r) => r.data),
+  cafeteriaOrdersSummary: (date) =>
+    api
+      .get("/api/cafeteria/orders/summary", { params: { date } })
+      .then((r) => r.data),
+  cafeteriaOrderCreate: (payload) =>
+    api.post("/api/cafeteria/orders", payload).then((r) => r.data),
+  cafeteriaOrderCancel: (id) =>
+    api.delete(`/api/cafeteria/orders/${id}`).then((r) => r.data),
+  cafeteriaOrderServe: (id) =>
+    api.post(`/api/cafeteria/orders/${id}/serve`).then((r) => r.data),
+  cafeteriaOrderPayment: (id, paymentStatus) =>
+    api
+      .post(`/api/cafeteria/orders/${id}/payment`, { paymentStatus })
+      .then((r) => r.data),
 
   // achievements
   achievements: (params) =>
@@ -301,6 +457,44 @@ export const endpoints = {
   disciplineUpdate: (id, patch) =>
     api.patch(`/api/discipline/${id}`, patch).then((r) => r.data),
 
+  // quizzes / question bank
+  quizSets: (params) => api.get("/api/quizzes/sets", { params }).then((r) => r.data),
+  quizSet: (id) => api.get(`/api/quizzes/sets/${id}`).then((r) => r.data),
+  quizSetCreate: (payload) =>
+    api.post("/api/quizzes/sets", payload).then((r) => r.data),
+  quizSetUpdate: (id, patch) =>
+    api.patch(`/api/quizzes/sets/${id}`, patch).then((r) => r.data),
+  quizSetDelete: (id) => api.delete(`/api/quizzes/sets/${id}`).then((r) => r.data),
+  quizSetAnalytics: (id) =>
+    api.get(`/api/quizzes/sets/${id}/analytics`).then((r) => r.data),
+  quizAttemptStart: (setId, studentId) =>
+    api
+      .post(`/api/quizzes/sets/${setId}/attempt`, studentId ? { studentId } : {})
+      .then((r) => r.data),
+  quizAttemptSubmit: (attemptId, answers) =>
+    api
+      .post(`/api/quizzes/attempts/${attemptId}/submit`, { answers })
+      .then((r) => r.data),
+  quizAttempt: (attemptId) =>
+    api.get(`/api/quizzes/attempts/${attemptId}`).then((r) => r.data),
+  quizAttempts: (params) =>
+    api.get("/api/quizzes/attempts", { params }).then((r) => r.data),
+
+  // safe-space reporting
+  safeReportSubmit: (payload) =>
+    api.post("/api/safe-reports", payload).then((r) => r.data),
+  safeReportLookup: (code) =>
+    api.get(`/api/safe-reports/lookup/${encodeURIComponent(code)}`).then((r) => r.data),
+  safeReportsMine: () =>
+    api.get("/api/safe-reports/mine").then((r) => r.data),
+  safeReports: (params) =>
+    api.get("/api/safe-reports", { params }).then((r) => r.data),
+  safeReport: (id) => api.get(`/api/safe-reports/${id}`).then((r) => r.data),
+  safeReportUpdate: (id, patch) =>
+    api.patch(`/api/safe-reports/${id}`, patch).then((r) => r.data),
+  safeReportRespond: (id, payload) =>
+    api.post(`/api/safe-reports/${id}/responses`, payload).then((r) => r.data),
+
   // health & medical
   healthProfiles: (params) =>
     api.get("/api/health/profiles", { params }).then((r) => r.data),
@@ -312,10 +506,58 @@ export const endpoints = {
     api.get("/api/health/visits", { params }).then((r) => r.data),
   healthVisitAdd: (payload) =>
     api.post("/api/health/visits", payload).then((r) => r.data),
+  vaccinationSchedule: () =>
+    api.get("/api/health/vaccinations/schedule").then((r) => r.data),
+  vaccinationCompliance: (params) =>
+    api.get("/api/health/vaccinations/compliance", { params }).then((r) => r.data),
+  vaccinationStatus: (studentId) =>
+    api.get(`/api/health/vaccinations/${studentId}`).then((r) => r.data),
+  vaccinationRecord: (studentId, payload) =>
+    api
+      .post(`/api/health/vaccinations/${studentId}/record`, payload)
+      .then((r) => r.data),
 
   // reports
   reportsOverview: () =>
     api.get("/api/reports/overview").then((r) => r.data),
+
+  // CSV exports. Returns a Blob so the caller can trigger a download.
+  // `params` is forwarded as query string (e.g. {grade:"8", from:"2026-01-01"}).
+  reportsExport: (kind, params) =>
+    api
+      .get(`/api/reports/export/${kind}.csv`, {
+        params,
+        responseType: "blob",
+      })
+      .then((r) => ({
+        blob: r.data,
+        // Server sends Content-Disposition: attachment; filename="..."
+        filename:
+          /filename="?([^";]+)/.exec(r.headers["content-disposition"] || "")?.[1] ||
+          `${kind}.csv`,
+      })),
+
+  // Bulk imports — `kind` is "students" / "teachers" / "staff" / "attendance"
+  // / "exam-marks". `dryRun` returns a preview without committing so the user
+  // can fix validation errors first. `params` is forwarded as query string
+  // (e.g. {examId: "EX123"} for exam-marks).
+  reportsImport: (kind, csv, { dryRun = false, params } = {}) =>
+    api
+      .post(`/api/admin/import/${kind}`, { csv, dryRun }, { params })
+      .then((r) => r.data),
+
+  reportsImportTemplate: (kind, params) =>
+    api
+      .get(`/api/admin/import/template/${kind}`, {
+        responseType: "blob",
+        params,
+      })
+      .then((r) => ({
+        blob: r.data,
+        filename:
+          /filename="?([^";]+)/.exec(r.headers["content-disposition"] || "")?.[1] ||
+          `${kind}-template.csv`,
+      })),
 
   // alumni
   alumni: (params) =>
@@ -549,6 +791,35 @@ export const endpoints = {
     api.patch(`/api/users/${id}/permissions`, payload).then((r) => r.data),
   dashboardWidgets: () =>
     api.get("/api/dashboard/widgets").then((r) => r.data),
+
+  // assignments
+  assignments: (params) =>
+    api.get("/api/assignments", { params }).then((r) => r.data),
+  assignment: (id) =>
+    api.get(`/api/assignments/${id}`).then((r) => r.data),
+  assignmentAdd: (payload) =>
+    api.post("/api/assignments", payload).then((r) => r.data),
+  assignmentUpdate: (id, payload) =>
+    api.patch(`/api/assignments/${id}`, payload).then((r) => r.data),
+  assignmentDelete: (id) =>
+    api.delete(`/api/assignments/${id}`).then((r) => r.data),
+  assignmentSubmit: (id, payload) =>
+    api.post(`/api/assignments/${id}/submit`, payload).then((r) => r.data),
+  assignmentGrade: (id, subId, payload) =>
+    api
+      .patch(`/api/assignments/${id}/submissions/${subId}`, payload)
+      .then((r) => r.data),
+
+  // 1:1 messages
+  messages: () => api.get("/api/messages").then((r) => r.data),
+  messagesSummary: () => api.get("/api/messages/summary").then((r) => r.data),
+  messagesContacts: () => api.get("/api/messages/contacts").then((r) => r.data),
+  messageThread: (id) => api.get(`/api/messages/${id}`).then((r) => r.data),
+  messageStart: (payload) => api.post("/api/messages", payload).then((r) => r.data),
+  messageSend: (id, payload) =>
+    api.post(`/api/messages/${id}/messages`, payload).then((r) => r.data),
+  messageMarkRead: (id) =>
+    api.patch(`/api/messages/${id}/read`).then((r) => r.data),
 
   // year-end class promotion
   promotion: () => api.get("/api/promotion").then((r) => r.data),

@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   CalendarClock,
   GraduationCap,
-  Sparkles as SparklesIcon,
   Printer,
   Filter,
   Pencil,
@@ -17,6 +16,7 @@ import {
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
+import { useRealtime } from "../../lib/useRealtime.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
 import { PageHeader } from "./Students.jsx";
@@ -54,6 +54,8 @@ export default function Timetable() {
   );
 
   const teachers = useApi(endpoints.teachers, []);
+  const conflicts = useApi(endpoints.timetableConflicts, []);
+  useRealtime("timetable.changed", () => conflicts.refetch());
 
   const periods = data?.periods || [];
   const days = data?.days || [];
@@ -182,6 +184,8 @@ export default function Timetable() {
 
       {fetchError && <ErrorState error={fetchError} onRetry={refetch} />}
 
+      <ConflictsBanner items={conflicts.data?.items || []} loading={conflicts.loading} />
+
       {loading ? (
         <Skeleton className="h-96" />
       ) : (
@@ -239,9 +243,9 @@ export default function Timetable() {
             cell={editingCell}
             teachers={teachers.data?.items || []}
             onClose={() => setEditingCell(null)}
-            onSaved={() => {
-              setEditingCell(null);
+            onChanged={() => {
               refetch();
+              conflicts.refetch();
             }}
             onError={setError}
           />
@@ -330,12 +334,13 @@ function SubjectLegend() {
   );
 }
 
-function CellEditDrawer({ cell, teachers, onClose, onSaved, onError }) {
+function CellEditDrawer({ cell, teachers, onClose, onChanged, onError }) {
   const [subject, setSubject] = useState(cell.subject);
   const [teacherId, setTeacherId] = useState(cell.teacherId);
   const [room, setRoom] = useState(cell.room);
   const [saving, setSaving] = useState(false);
   const [reverting, setReverting] = useState(false);
+  const [conflicts, setConflicts] = useState(null);
 
   const inputCls =
     "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50";
@@ -343,8 +348,9 @@ function CellEditDrawer({ cell, teachers, onClose, onSaved, onError }) {
   const onSave = async (e) => {
     e.preventDefault();
     setSaving(true);
+    setConflicts(null);
     try {
-      await endpoints.timetableSetCell({
+      const res = await endpoints.timetableSetCell({
         grade: cell.grade,
         section: cell.section,
         day: cell.day,
@@ -353,7 +359,14 @@ function CellEditDrawer({ cell, teachers, onClose, onSaved, onError }) {
         teacherId,
         room,
       });
-      onSaved();
+      onChanged();
+      // The slot is saved either way; if it double-books a teacher or room,
+      // keep the drawer open and surface the clash so the user can adjust.
+      if (res?.hasConflict) {
+        setConflicts(res.conflicts);
+      } else {
+        onClose();
+      }
     } catch (err) {
       onError(err?.response?.data?.error || err.message);
     } finally {
@@ -370,7 +383,8 @@ function CellEditDrawer({ cell, teachers, onClose, onSaved, onError }) {
         day: cell.day,
         period: cell.period,
       });
-      onSaved();
+      onChanged();
+      onClose();
     } catch (err) {
       onError(err?.response?.data?.error || err.message);
     } finally {
@@ -448,6 +462,33 @@ function CellEditDrawer({ cell, teachers, onClose, onSaved, onError }) {
             </Field>
           </div>
 
+          {conflicts && (
+            <div className="mt-4 rounded-xl border border-rose-400/40 bg-rose-500/10 p-3 text-xs text-rose-100">
+              <div className="mb-1 flex items-center gap-1.5 font-semibold text-rose-200">
+                <CircleAlert size={13} /> Saved — but this slot now double-books:
+              </div>
+              {conflicts.teacherClashes?.length > 0 && (
+                <div className="mt-1">
+                  <span className="text-rose-300/80">Teacher</span> {teacherId} also teaches{" "}
+                  {conflicts.teacherClashes
+                    .map((c) => `${c.grade}-${c.section} (${c.subject})`)
+                    .join(", ")}
+                </div>
+              )}
+              {conflicts.roomClashes?.length > 0 && (
+                <div className="mt-1">
+                  <span className="text-rose-300/80">Room</span> {room} also used by{" "}
+                  {conflicts.roomClashes
+                    .map((c) => `${c.grade}-${c.section} (${c.subject})`)
+                    .join(", ")}
+                </div>
+              )}
+              <div className="mt-1.5 text-rose-200/70">
+                Pick a different teacher or room above and save again to resolve.
+              </div>
+            </div>
+          )}
+
           <div className="mt-6 flex gap-2">
             {cell.overridden && (
               <button
@@ -490,5 +531,52 @@ function Field({ label, children }) {
       </span>
       {children}
     </label>
+  );
+}
+
+function ConflictsBanner({ items, loading }) {
+  const [open, setOpen] = useState(false);
+  if (loading || !items || items.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <CircleAlert size={16} className="shrink-0 text-amber-300" />
+        <span className="font-semibold">
+          {items.length} timetable conflict{items.length === 1 ? "" : "s"} detected
+        </span>
+        <span className="ml-auto text-xs text-amber-200/70">
+          {open ? "Hide" : "Show details"}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-3 space-y-2">
+          {items.map((c) => (
+            <div
+              key={`${c.grade}-${c.section}-${c.day}-${c.period}`}
+              className="rounded-lg border border-amber-400/20 bg-black/20 p-2.5 text-xs"
+            >
+              <div className="font-medium text-amber-100">
+                {c.grade}-{c.section} · {c.day} · Period {c.period} · {c.subject}
+              </div>
+              {c.teacherClashes.length > 0 && (
+                <div className="mt-1 text-amber-200/80">
+                  Teacher {c.teacherId} clashes with{" "}
+                  {c.teacherClashes.map((t) => `${t.grade}-${t.section}`).join(", ")}
+                </div>
+              )}
+              {c.roomClashes.length > 0 && (
+                <div className="mt-0.5 text-amber-200/80">
+                  Room {c.room} clashes with{" "}
+                  {c.roomClashes.map((t) => `${t.grade}-${t.section}`).join(", ")}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

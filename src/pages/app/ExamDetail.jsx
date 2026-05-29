@@ -104,7 +104,7 @@ export default function ExamDetail() {
             >
               {tab === "schedule" && <Schedule exam={data.exam} />}
               {tab === "hall-ticket" && (
-                <HallTicket exam={data.exam} student={data.rows[0]} />
+                <HallTicket exam={data.exam} rows={data.rows} />
               )}
               {tab === "marks" && (
                 <MarksEntry
@@ -177,7 +177,11 @@ function Schedule({ exam }) {
   );
 }
 
-function HallTicket({ exam, student }) {
+function HallTicket({ exam, rows }) {
+  const candidates = (rows || []).filter((r) => r.studentId);
+  const [studentId, setStudentId] = useState(candidates[0]?.studentId || "");
+  const student = candidates.find((r) => r.studentId === studentId) || candidates[0];
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_360px]">
       <div className="card">
@@ -185,10 +189,9 @@ function HallTicket({ exam, student }) {
           Hall ticket preview
         </div>
         <p className="text-sm text-white/65">
-          Hall tickets are generated per-student. A QR code links to the
-          student's profile and attendance record. Below is a live preview for{" "}
-          <span className="font-semibold text-white">{student?.name}</span>.
-          Bulk-print from the action button on the right.
+          Hall tickets are generated per-student with seat number, subject-wise
+          schedule and exam-hall instructions. Pick a candidate to preview, then
+          open the printable ticket.
         </p>
         <div className="mt-5">
           <TicketCard exam={exam} student={student} />
@@ -197,17 +200,35 @@ function HallTicket({ exam, student }) {
 
       <div className="card">
         <div className="mb-2 font-display text-lg font-semibold">
-          Bulk actions
+          Generate hall ticket
         </div>
         <p className="text-sm text-white/65">
-          Generate hall tickets for the entire grade in one go.
+          Choose a candidate from Grade {exam.grade}.
         </p>
-        <div className="mt-4 space-y-2">
-          <button className="btn-primary w-full">
-            <Ticket size={14} /> Generate all hall tickets
-          </button>
-          <button className="btn-ghost w-full">Email to parents</button>
-          <button className="btn-ghost w-full">Download PDF (zip)</button>
+        <div className="mt-4 space-y-3">
+          <select
+            value={studentId}
+            onChange={(e) => setStudentId(e.target.value)}
+            className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-brand-400/60"
+          >
+            {candidates.map((r) => (
+              <option key={r.studentId} value={r.studentId}>
+                {r.name} · {r.studentId}
+              </option>
+            ))}
+          </select>
+          {student ? (
+            <Link
+              to={`/print/hall-ticket/${exam.id}/${student.studentId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary flex w-full items-center justify-center gap-2"
+            >
+              <Ticket size={14} /> Open printable hall ticket
+            </Link>
+          ) : (
+            <div className="text-xs text-white/45">No candidates in this grade yet.</div>
+          )}
         </div>
       </div>
     </div>

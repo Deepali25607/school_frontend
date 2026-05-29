@@ -871,6 +871,8 @@ const ALWAYS_PINNED = new Set(["/app", "/app/settings"]);
 
 function PermissionsModal({ user, onClose, onSaved, onError }) {
   const isStudent = user.role === "student";
+  const isParent = user.role === "parent";
+  const isTeacher = user.role === "teacher";
 
   // Role-default NAV items (the universe of things admin can toggle).
   const roleNav = useMemo(
@@ -884,14 +886,29 @@ function PermissionsModal({ user, onClose, onSaved, onError }) {
     new Set(user.permissions?.hiddenWidgets || [])
   );
   const [scopeStudentId, setScopeStudentId] = useState(user.scopeStudentId || "");
+  const [linkedChildren, setLinkedChildren] = useState(
+    new Set(user.permissions?.linkedStudentIds || [])
+  );
+  const [linkedTeacherId, setLinkedTeacherId] = useState(
+    user.permissions?.linkedTeacherId || ""
+  );
+  const [childQ, setChildQ] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // For students, fetch the student list so admin can pin them to a record.
+  // For student / parent users, fetch the student list so admin can link.
+  const needStudentList = isStudent || isParent;
   const { data: studentsData } = useApi(
-    () => (isStudent ? endpoints.students({}) : Promise.resolve({ items: [] })),
-    [isStudent]
+    () => (needStudentList ? endpoints.students({}) : Promise.resolve({ items: [] })),
+    [needStudentList]
   );
   const studentList = studentsData?.items || [];
+
+  // For teacher users, fetch the teachers roster.
+  const { data: teachersData } = useApi(
+    () => (isTeacher ? endpoints.teachers({}) : Promise.resolve({ items: [] })),
+    [isTeacher]
+  );
+  const teacherList = teachersData?.items || [];
 
   // Widget catalog (id, label, role defaults) so we can show only the
   // widgets this user's role is even eligible to see.
@@ -927,6 +944,8 @@ function PermissionsModal({ user, onClose, onSaved, onError }) {
         hiddenPaths: [...hidden],
         hiddenWidgets: [...hiddenWidgets],
         scopeStudentId: isStudent ? scopeStudentId || null : undefined,
+        linkedStudentIds: isParent ? [...linkedChildren] : undefined,
+        linkedTeacherId: isTeacher ? linkedTeacherId || null : undefined,
       });
       onSaved();
     } catch (err) {
@@ -934,6 +953,13 @@ function PermissionsModal({ user, onClose, onSaved, onError }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const toggleChild = (id) => {
+    const next = new Set(linkedChildren);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setLinkedChildren(next);
   };
 
   const toggleWidget = (id) => {
@@ -983,6 +1009,132 @@ function PermissionsModal({ user, onClose, onSaved, onError }) {
               {studentList.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.id} · Grade {s.grade}-{s.section} · {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {isParent && (
+          <div className="rounded-xl border border-amber-400/30 bg-amber-500/[0.06] p-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-amber-100">
+              <Link2 size={14} /> Linked children
+            </div>
+            <p className="mt-1 text-[11px] text-amber-200/75">
+              Pick one or more Student records this parent is responsible for.
+              Their dashboard, fees, attendance and exams will be scoped to
+              just these children. Leave empty to fall back to the first
+              student (demo only).
+            </p>
+            <div className="mt-2 flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5">
+              <Search size={12} className="text-white/55" />
+              <input
+                value={childQ}
+                onChange={(e) => setChildQ(e.target.value)}
+                placeholder="Search by name, ID or grade…"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-white/40"
+              />
+              <span className="text-[11px] text-amber-200">
+                {linkedChildren.size} selected
+              </span>
+            </div>
+            <div className="mt-2 max-h-56 overflow-y-auto rounded-lg border border-white/5 bg-white/[0.02]">
+              {studentList.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-white/45">
+                  Loading students…
+                </div>
+              ) : (
+                studentList
+                  .filter((s) => {
+                    if (!childQ.trim()) return true;
+                    const t = childQ.toLowerCase();
+                    return (
+                      s.name.toLowerCase().includes(t) ||
+                      s.id.toLowerCase().includes(t) ||
+                      `grade ${s.grade}`.includes(t) ||
+                      `${s.grade}-${s.section}`.toLowerCase().includes(t)
+                    );
+                  })
+                  .slice(0, 80)
+                  .map((s) => {
+                    const checked = linkedChildren.has(s.id);
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => toggleChild(s.id)}
+                        className={`flex w-full items-center gap-3 border-b border-white/5 px-3 py-2 text-left text-xs transition ${
+                          checked
+                            ? "bg-amber-500/[0.10] text-white"
+                            : "text-white/75 hover:bg-white/[0.04]"
+                        }`}
+                      >
+                        <span
+                          className={`grid h-4 w-4 shrink-0 place-items-center rounded border ${
+                            checked
+                              ? "border-amber-400 bg-amber-400 text-[#0a0a1c]"
+                              : "border-white/20 bg-white/5"
+                          }`}
+                        >
+                          {checked && <Check size={10} strokeWidth={3} />}
+                        </span>
+                        <span className="font-mono text-[10px] text-white/45">
+                          {s.id}
+                        </span>
+                        <span className="flex-1 truncate">{s.name}</span>
+                        <span className="text-[10px] text-white/45">
+                          Grade {s.grade}-{s.section}
+                        </span>
+                      </button>
+                    );
+                  })
+              )}
+            </div>
+            {linkedChildren.size > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {[...linkedChildren].map((id) => {
+                  const s = studentList.find((x) => x.id === id);
+                  return (
+                    <span
+                      key={id}
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-200 ring-1 ring-amber-400/30"
+                    >
+                      {s ? `${s.name}` : id}
+                      <button
+                        type="button"
+                        onClick={() => toggleChild(id)}
+                        className="rounded-full p-0.5 hover:bg-white/10"
+                        title="Unlink"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {isTeacher && (
+          <div className="rounded-xl border border-brand-400/30 bg-brand-500/[0.06] p-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-brand-100">
+              <Link2 size={14} /> Linked teacher record
+            </div>
+            <p className="mt-1 text-[11px] text-brand-200/75">
+              Scopes Students, Attendance, Exams and Timetable to the classes
+              this teacher actually teaches (derived from the timetable). The
+              roster + grades are pulled live from the timetable grid.
+            </p>
+            <select
+              value={linkedTeacherId}
+              onChange={(e) => setLinkedTeacherId(e.target.value)}
+              className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50"
+            >
+              <option value="">— auto (seed link / first teacher) —</option>
+              {teacherList.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.id} · {t.name} · {t.subject}
                 </option>
               ))}
             </select>

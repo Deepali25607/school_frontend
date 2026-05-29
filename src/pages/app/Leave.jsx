@@ -36,6 +36,7 @@ export default function Leave() {
   const canApprove = ["admin", "principal", "hr"].includes(user?.role);
   const [tab, setTab] = useState(canApprove ? "queue" : "history");
   const [applying, setApplying] = useState(false);
+  const [histStatus, setHistStatus] = useState("all"); // history sub-filter driven by the stat cards
 
   const all = useApi(endpoints.leave, []);
 
@@ -44,6 +45,7 @@ export default function Leave() {
 
   const pending = items.filter((r) => r.status === "Pending");
   const decided = items.filter((r) => r.status !== "Pending");
+  const decidedShown = decided.filter((r) => histStatus === "all" || r.status === histStatus);
 
   const onDecide = async (id, status) => {
     await endpoints.leaveDecide(id, status);
@@ -61,10 +63,18 @@ export default function Leave() {
       {all.error && <ErrorState error={all.error} onRetry={all.refetch} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile label="Pending" value={all.loading ? "—" : summary?.pending} tint="from-amber-500/30" pulse={summary?.pending > 0} />
-        <StatTile label="Approved" value={all.loading ? "—" : summary?.approved} tint="from-emerald-500/30" />
-        <StatTile label="Rejected" value={all.loading ? "—" : summary?.rejected} tint="from-rose-500/30" />
-        <StatTile label="Total" value={all.loading ? "—" : summary?.total} tint="from-brand-500/30" />
+        <button type="button" onClick={() => { setTab(canApprove ? "queue" : "history"); setHistStatus("all"); }} className={`block w-full rounded-2xl text-left transition-all ${tab === "queue" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="Pending" value={all.loading ? "—" : summary?.pending} tint="from-amber-500/30" pulse={summary?.pending > 0} />
+        </button>
+        <button type="button" onClick={() => { setTab("history"); setHistStatus("Approved"); }} className={`block w-full rounded-2xl text-left transition-all ${tab === "history" && histStatus === "Approved" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="Approved" value={all.loading ? "—" : summary?.approved} tint="from-emerald-500/30" />
+        </button>
+        <button type="button" onClick={() => { setTab("history"); setHistStatus("Rejected"); }} className={`block w-full rounded-2xl text-left transition-all ${tab === "history" && histStatus === "Rejected" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="Rejected" value={all.loading ? "—" : summary?.rejected} tint="from-rose-500/30" />
+        </button>
+        <button type="button" onClick={() => { setTab("history"); setHistStatus("all"); }} className={`block w-full rounded-2xl text-left transition-all ${tab === "history" && histStatus === "all" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile label="Total" value={all.loading ? "—" : summary?.total} tint="from-brand-500/30" />
+        </button>
       </div>
 
       <div className="card flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -78,7 +88,7 @@ export default function Leave() {
           ).map((t) => (
             <button
               key={t.k}
-              onClick={() => setTab(t.k)}
+              onClick={() => { setTab(t.k); setHistStatus("all"); }}
               className={`rounded-xl px-3 py-1.5 text-sm transition-all ${
                 tab === t.k
                   ? "bg-gradient-to-r from-brand-500/30 to-accent-violet/20 text-white ring-1 ring-white/15"
@@ -103,7 +113,7 @@ export default function Leave() {
       )}
 
       {tab === "history" && (
-        <HistoryTab items={decided} loading={all.loading} canApprove={canApprove} onDecide={onDecide} />
+        <HistoryTab items={decidedShown} loading={all.loading} canApprove={canApprove} onDecide={onDecide} />
       )}
 
       <AnimatePresence>

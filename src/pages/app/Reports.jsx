@@ -14,6 +14,7 @@ import {
   RadialBar,
   PolarAngleAxis,
 } from "recharts";
+import { useEffect, useState } from "react";
 import {
   Users,
   GraduationCap,
@@ -30,10 +31,18 @@ import {
   UtensilsCrossed,
   Sparkles as SparklesIcon,
   TrendingUp,
+  Download,
+  Loader,
+  Upload,
+  FileSpreadsheet,
+  CircleAlert,
+  CircleCheckBig,
+  X,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
 import { useRealtime } from "../../lib/useRealtime.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
 import { PageHeader } from "./Students.jsx";
 
@@ -102,9 +111,11 @@ const MODULE_TINTS = {
 };
 
 export default function Reports() {
+  const { user } = useAuth();
+  const canSeeOverview = ["admin", "principal", "accountant"].includes(user?.role);
   const { data, loading, error, refetch } = useApi(
-    endpoints.reportsOverview,
-    []
+    () => (canSeeOverview ? endpoints.reportsOverview() : Promise.resolve(null)),
+    [canSeeOverview]
   );
   // Reports aggregate everything — refresh on any module mutation
   useRealtime(
@@ -140,14 +151,23 @@ export default function Reports() {
         }
       />
 
-      {error && <ErrorState error={error} onRetry={refetch} />}
+      {canSeeOverview && error && <ErrorState error={error} onRetry={refetch} />}
 
-      {/* Module counts strip */}
+      {/* CSV exports */}
+      <ExportsPanel />
+
+      {/* CSV bulk imports */}
+      <ImportsPanel />
+
+      {/* Module counts strip — only for the overview-eligible roles. Teachers
+          and HR land on this page just for the import/export panels above. */}
+      {canSeeOverview && (
+      <>
       {loading ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8">
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24" />)}
         </div>
-      ) : (
+      ) : data ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-8">
           {Object.entries(data.moduleCounts).map(([key, value], i) => {
             const Icon = MODULE_ICONS[key] || SparklesIcon;
@@ -175,7 +195,7 @@ export default function Reports() {
             );
           })}
         </div>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Enrollment by grade */}
@@ -335,6 +355,8 @@ export default function Reports() {
           </div>
         )}
       </ChartCard>
+      </>
+      )}
     </div>
   );
 }
@@ -365,3 +387,486 @@ const tooltipStyle = {
   borderRadius: 12,
   color: "white",
 };
+
+// ============ CSV exports panel ============
+// Each tile triggers a server-side CSV build with the caller's scope and a
+// timestamped filename. Available to every role — backend filters the rows
+// to what the caller can actually see.
+
+const STAFF_ROLES = new Set(["admin", "principal", "hr"]);
+
+const EXPORTS = [
+  {
+    kind: "students",
+    title: "Students roster",
+    desc: "ID, name, grade, section, house, attendance, fee status, parent contact.",
+    requireRole: STAFF_ROLES,
+  },
+  {
+    kind: "attendance",
+    title: "Attendance ledger",
+    desc: "Per-date status entries. Teachers download their classes; parents/students get their own ledger.",
+  },
+  {
+    kind: "fees",
+    title: "Fee payments",
+    desc: "Payment ledger with receipt numbers, amounts, modes. Parents/students scope to their own.",
+  },
+  {
+    kind: "exams",
+    title: "Exam marks",
+    desc: "One row per (student × paper) with grade letter. Teachers see their classes only.",
+  },
+  {
+    kind: "discipline",
+    title: "Discipline incidents",
+    desc: "Incidents with category, severity, status, resolution. Parents/students scope to their own.",
+  },
+];
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function ExportsPanel() {
+  const { user } = useAuth();
+  const role = user?.role;
+  const [busyKind, setBusyKind] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
+
+  const visible = EXPORTS.filter(
+    (e) => !e.requireRole || e.requireRole.has(role)
+  );
+  if (visible.length === 0) return null;
+
+  async function downloadCsv(kind) {
+    setBusyKind(kind);
+    setErrorMsg(null);
+    try {
+      const { blob, filename } = await endpoints.reportsExport(kind);
+      downloadBlob(blob, filename);
+    } catch (e) {
+      setErrorMsg(e?.response?.data?.error || e.message || "Download failed");
+    } finally {
+      setBusyKind(null);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-display text-base font-semibold text-white">
+            Downloads
+          </div>
+          <div className="text-xs text-white/55">
+            CSV exports for record-keeping. Scoped to what you're allowed to see.
+          </div>
+        </div>
+        <Download size={16} className="text-white/45" />
+      </div>
+      {errorMsg && (
+        <div className="mb-3 rounded-lg border border-rose-400/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+          {errorMsg}
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
+        {visible.map((e) => {
+          const busy = busyKind === e.kind;
+          return (
+            <button
+              key={e.kind}
+              type="button"
+              onClick={() => downloadCsv(e.kind)}
+              disabled={busy}
+              className="group flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:border-brand-400/30 hover:bg-white/[0.06] disabled:opacity-60"
+            >
+              <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-brand-500/20 to-accent-violet/20 ring-1 ring-white/10">
+                {busy ? (
+                  <Loader size={14} className="animate-spin text-brand-200" />
+                ) : (
+                  <Download size={14} className="text-brand-200" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-medium text-white">{e.title}</div>
+                <div className="mt-0.5 line-clamp-2 text-[11px] text-white/55">
+                  {e.desc}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============ CSV bulk import panel ============
+// Two flows: students (admin/principal) and attendance (admin/principal/teacher).
+// User picks a kind, pastes / uploads CSV, gets a dry-run preview, then commits.
+
+const IMPORT_KINDS = [
+  {
+    kind: "students",
+    title: "Students roster",
+    desc: "Add many students at once. Columns: name*, grade*, section, house, gender, gpa, attendance, feeStatus, parent, contact, photoUrl.",
+    requireRole: new Set(["admin", "principal"]),
+  },
+  {
+    kind: "teachers",
+    title: "Teachers roster",
+    desc: "Onboard the teaching faculty. Columns: name*, subject*, classes, experience, rating, email, status, photoUrl.",
+    requireRole: new Set(["admin", "principal", "hr"]),
+  },
+  {
+    kind: "staff",
+    title: "Non-teaching staff",
+    desc: "Accountants, drivers, security, IT, nurse, receptionist, etc. Columns: name*, category*, designation*, department, email, phone, joinedOn, status, employmentType, salary, gender, address, emergencyContact, notes, photoUrl.",
+    requireRole: new Set(["admin", "principal", "hr"]),
+  },
+  {
+    kind: "attendance",
+    title: "Attendance bulk upload",
+    desc: "Backfill paper rolls. Columns: date*, studentId*, status* (Present/Absent/Late/Leave). Teachers limited to their classes.",
+  },
+  {
+    kind: "exam-marks",
+    title: "Exam marks upload",
+    desc: "Upload graded paper marks for an exam. Columns: studentId*, subject*, marks*. Teachers limited to their subjects and classes.",
+    requireRole: new Set(["admin", "principal", "teacher"]),
+    needsExam: true,
+  },
+];
+
+function ImportsPanel() {
+  const { user } = useAuth();
+  const role = user?.role;
+  const visible = IMPORT_KINDS.filter(
+    (k) => !k.requireRole || k.requireRole.has(role)
+  );
+  const [active, setActive] = useState(null); // selected kind
+  if (visible.length === 0) return null;
+
+  return (
+    <div className="card">
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <div className="font-display text-base font-semibold text-white">
+            Bulk import
+          </div>
+          <div className="text-xs text-white/55">
+            CSV uploads with row-by-row validation and a dry-run preview before commit.
+          </div>
+        </div>
+        <Upload size={16} className="text-white/45" />
+      </div>
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+        {visible.map((k) => (
+          <button
+            key={k.kind}
+            type="button"
+            onClick={() => setActive(k.kind)}
+            className="group flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:border-brand-400/30 hover:bg-white/[0.06]"
+          >
+            <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-emerald-500/20 to-brand-500/20 ring-1 ring-white/10">
+              <Upload size={14} className="text-emerald-200" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-white">{k.title}</div>
+              <div className="mt-0.5 line-clamp-2 text-[11px] text-white/55">
+                {k.desc}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {active && (
+        <ImportModal
+          kind={active}
+          spec={visible.find((k) => k.kind === active)}
+          onClose={() => setActive(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ImportModal({ kind, spec, onClose }) {
+  const [csv, setCsv] = useState("");
+  const [preview, setPreview] = useState(null); // dry-run result
+  const [committing, setCommitting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(null);
+
+  // For exam-marks the user must pick which exam they're uploading marks
+  // for before validation/commit. We fetch the exams roster on open.
+  const [examOptions, setExamOptions] = useState([]);
+  const [examId, setExamId] = useState("");
+  useEffect(() => {
+    if (!spec.needsExam) return;
+    endpoints
+      .exams?.()
+      ?.then((r) => setExamOptions(r.items || []))
+      .catch(() => {});
+  }, [spec.needsExam]);
+
+  const extraParams = spec.needsExam && examId ? { examId } : undefined;
+  const blocked = spec.needsExam && !examId;
+
+  async function readFile(file) {
+    const text = await file.text();
+    setCsv(text);
+    setPreview(null);
+    setError(null);
+    setDone(null);
+  }
+
+  async function dryRun() {
+    setBusy(true);
+    setError(null);
+    setDone(null);
+    try {
+      const r = await endpoints.reportsImport(kind, csv, {
+        dryRun: true,
+        params: extraParams,
+      });
+      setPreview(r);
+    } catch (e) {
+      const data = e?.response?.data;
+      // Validation errors come back as 422 with the same shape as dry-run.
+      if (data && Array.isArray(data.errors)) setPreview(data);
+      else setError(data?.error || e.message || "Upload failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function commit() {
+    setCommitting(true);
+    setError(null);
+    try {
+      const r = await endpoints.reportsImport(kind, csv, {
+        dryRun: false,
+        params: extraParams,
+      });
+      setDone(r);
+    } catch (e) {
+      const data = e?.response?.data;
+      if (data && Array.isArray(data.errors)) setPreview(data);
+      else setError(data?.error || e.message || "Import failed");
+    } finally {
+      setCommitting(false);
+    }
+  }
+
+  async function downloadTemplate() {
+    if (blocked) {
+      setError("Pick an exam first");
+      return;
+    }
+    const { blob, filename } = await endpoints.reportsImportTemplate(kind, extraParams);
+    downloadBlob(blob, filename);
+  }
+
+  const hasErrors = preview?.errors?.length > 0;
+  const validCount = preview?.valid || 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        onClick={(e) => e.stopPropagation()}
+        className="mt-12 w-full max-w-2xl rounded-2xl border border-white/10 bg-[#0d0f24] p-5 shadow-2xl"
+      >
+        <div className="mb-3 flex items-start justify-between">
+          <div>
+            <div className="font-display text-lg font-semibold text-white">
+              Import · {spec.title}
+            </div>
+            <div className="mt-0.5 text-xs text-white/55">{spec.desc}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-white/55 hover:bg-white/10 hover:text-white"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {spec.needsExam && (
+            <div>
+              <div className="mb-1 text-[10px] uppercase tracking-wider text-white/55">
+                Pick exam
+              </div>
+              <select
+                value={examId}
+                onChange={(e) => {
+                  setExamId(e.target.value);
+                  setPreview(null);
+                  setDone(null);
+                }}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50"
+              >
+                <option value="">— Select an exam —</option>
+                {examOptions.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} · Grade {e.grade}
+                  </option>
+                ))}
+              </select>
+              <div className="mt-1 text-[10px] text-white/45">
+                The downloaded template will be pre-filled with the roster for this exam.
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={downloadTemplate}
+              disabled={blocked}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10 disabled:opacity-50"
+            >
+              <FileSpreadsheet size={12} /> Download blank template
+            </button>
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-brand-400/30 bg-brand-500/15 px-3 py-1.5 text-xs text-brand-100 hover:bg-brand-500/25">
+              <Upload size={12} /> Choose CSV file
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) readFile(f);
+                  e.target.value = "";
+                }}
+                className="hidden"
+              />
+            </label>
+            {csv && (
+              <span className="text-[11px] text-white/55">
+                {csv.split(/\r?\n/).filter(Boolean).length} lines loaded
+              </span>
+            )}
+          </div>
+
+          <textarea
+            value={csv}
+            onChange={(e) => {
+              setCsv(e.target.value);
+              setPreview(null);
+              setDone(null);
+            }}
+            rows={8}
+            placeholder="…or paste CSV content here"
+            className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-white outline-none focus:border-brand-400/50"
+          />
+
+          {error && (
+            <div className="flex items-start gap-2 rounded-lg border border-rose-400/30 bg-rose-500/10 p-2 text-xs text-rose-200">
+              <CircleAlert size={14} className="mt-0.5 shrink-0" />
+              <div>{error}</div>
+            </div>
+          )}
+
+          {preview && (
+            <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3 text-xs">
+              <div className="mb-2 flex items-center gap-2">
+                {hasErrors ? (
+                  <CircleAlert size={14} className="text-amber-300" />
+                ) : (
+                  <CircleCheckBig size={14} className="text-emerald-300" />
+                )}
+                <span className="font-medium">
+                  Dry-run · {validCount} of {preview.totalRows} rows valid
+                  {hasErrors && ` · ${preview.errors.length} need fixing`}
+                </span>
+              </div>
+              {hasErrors && (
+                <div className="mb-2 max-h-32 overflow-y-auto rounded-md bg-black/30 p-2 font-mono text-[11px] text-rose-200">
+                  {preview.errors.slice(0, 20).map((er, i) => (
+                    <div key={i}>
+                      Row {er.row}: {er.message}
+                    </div>
+                  ))}
+                  {preview.errors.length > 20 && (
+                    <div className="mt-1 text-white/45">
+                      …and {preview.errors.length - 20} more
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {done && (
+            <div className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+              <CircleCheckBig size={14} className="inline" />{" "}
+              {done.created
+                ? `Imported ${done.created.length} ${kind === "students" ? "students" : kind === "teachers" ? "teachers" : "staff members"}`
+                : kind === "exam-marks"
+                ? `Saved ${done.saved} marks entries for ${done.examName}`
+                : `Saved ${done.saved} attendance entries`}
+              {done.errors?.length > 0 && (
+                <span className="text-amber-200">
+                  {" "}
+                  · {done.errors.length} rows skipped — re-upload after fixing.
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-2 border-t border-white/5 pt-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={dryRun}
+            disabled={busy || !csv.trim() || blocked}
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/80 hover:bg-white/10 disabled:opacity-50"
+          >
+            {busy ? <Loader size={12} className="mr-1 inline animate-spin" /> : null}
+            Validate (dry-run)
+          </button>
+          <button
+            type="button"
+            onClick={commit}
+            disabled={committing || !csv.trim() || hasErrors || blocked}
+            className="btn-primary px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {committing ? (
+              <Loader size={12} className="animate-spin" />
+            ) : (
+              <Upload size={12} />
+            )}
+            Commit import
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}

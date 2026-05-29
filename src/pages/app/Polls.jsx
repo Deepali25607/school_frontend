@@ -104,20 +104,24 @@ export default function Polls() {
       {error && <ErrorState error={error} onRetry={refetch} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          icon={Vote}
-          label="Active"
-          value={summary ? summary.active : "—"}
-          tint="from-emerald-500/30"
-          accent="text-emerald-300"
-        />
-        <StatTile
-          icon={StopCircle}
-          label="Closed"
-          value={summary ? summary.closed : "—"}
-          tint="from-rose-500/30"
-          accent="text-rose-300"
-        />
+        <button type="button" onClick={() => setStatus(status === "active" ? "all" : "active")} className={`block w-full rounded-2xl text-left transition-all ${status === "active" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Vote}
+            label="Active"
+            value={summary ? summary.active : "—"}
+            tint="from-emerald-500/30"
+            accent="text-emerald-300"
+          />
+        </button>
+        <button type="button" onClick={() => setStatus(status === "closed" ? "all" : "closed")} className={`block w-full rounded-2xl text-left transition-all ${status === "closed" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={StopCircle}
+            label="Closed"
+            value={summary ? summary.closed : "—"}
+            tint="from-rose-500/30"
+            accent="text-rose-300"
+          />
+        </button>
         <StatTile
           icon={TrendingUp}
           label="Total responses"

@@ -38,6 +38,25 @@ const STATUS_TONES = {
 export default function PTM() {
   const { user } = useAuth();
   const canCreateSession = ["admin", "principal"].includes(user?.role);
+  const isParent = user?.role === "parent";
+  const isStudent = user?.role === "student";
+  const isTeacher = user?.role === "teacher";
+  const myStudents = useMemo(() => {
+    if (isParent) return user?.scope?.children || [];
+    if (isStudent && user?.scope?.studentId) {
+      return [
+        {
+          id: user.scope.studentId,
+          name: user.name,
+          grade: user.scope.grade,
+          section: user.scope.section,
+        },
+      ];
+    }
+    return [];
+  }, [user, isParent, isStudent]);
+  const canBookForSelf = isParent || isStudent;
+  const canBookForAnyone = ["admin", "principal"].includes(user?.role);
 
   const [filter, setFilter] = useState("all");
   const [creating, setCreating] = useState(false);
@@ -80,12 +99,14 @@ export default function PTM() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          icon={CalendarClock}
-          label="Upcoming sessions"
-          value={summary ? summary.upcomingSessions : "—"}
-          tint="from-brand-500/30"
-        />
+        <button type="button" onClick={() => setFilter(filter === "upcoming" ? "all" : "upcoming")} className={`block w-full rounded-2xl text-left transition-all ${filter === "upcoming" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={CalendarClock}
+            label="Upcoming sessions"
+            value={summary ? summary.upcomingSessions : "—"}
+            tint="from-brand-500/30"
+          />
+        </button>
         <StatTile
           icon={UserCheck}
           label="Confirmed bookings"
@@ -106,12 +127,14 @@ export default function PTM() {
           accent="text-amber-300"
           pulse={!!summary?.nextSession}
         />
-        <StatTile
-          icon={Check}
-          label="Completed"
-          value={summary ? summary.completedBookings : "—"}
-          tint="from-accent-violet/30"
-        />
+        <button type="button" onClick={() => setFilter(filter === "completed" ? "all" : "completed")} className={`block w-full rounded-2xl text-left transition-all ${filter === "completed" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Check}
+            label="Completed"
+            value={summary ? summary.completedBookings : "—"}
+            tint="from-accent-violet/30"
+          />
+        </button>
       </div>
 
       {/* Sessions list + action */}
@@ -173,8 +196,11 @@ export default function PTM() {
       {active && (
         <SessionDetail
           session={active}
-          canBook
+          canBook={canBookForSelf || canBookForAnyone}
           canManage={canCreateSession}
+          isTeacher={isTeacher}
+          myStudents={myStudents}
+          allowStudentSearch={canBookForAnyone}
           onChanged={refetch}
         />
       )}
@@ -268,7 +294,7 @@ function SessionCard({ session, idx, active, onClick }) {
 
 // ---------- Session detail / slot grid ----------
 
-function SessionDetail({ session, canBook, canManage, onChanged }) {
+function SessionDetail({ session, canBook, canManage, isTeacher, myStudents, allowStudentSearch, onChanged }) {
   const [bookingFor, setBookingFor] = useState(null);
   const [studentSearchOpen, setStudentSearchOpen] = useState(false);
 
@@ -389,8 +415,24 @@ function SessionDetail({ session, canBook, canManage, onChanged }) {
                         const isBooked = !!b;
                         const isCompleted =
                           session.status === "completed";
+                        const isMine = !!b?.mine;
+                        const isAnon = !!b?.anonymized;
                         const disabled =
                           isBooked || isCompleted || !canBook;
+                        const label = isBooked
+                          ? isMine
+                            ? b.studentName?.split(" ")[0]?.slice(0, 5) || "you"
+                            : isAnon
+                            ? "•"
+                            : b.studentName?.split(" ")[0]?.slice(0, 5) || "✓"
+                          : "free";
+                        const title = isBooked
+                          ? isMine
+                            ? `Your slot · ${b.studentName}`
+                            : isAnon
+                            ? "Slot is taken"
+                            : `Booked by ${b.parentName} (${b.studentName})`
+                          : "Click to book this slot";
                         return (
                           <td key={slot} className="px-1 py-1">
                             <button
@@ -405,24 +447,17 @@ function SessionDetail({ session, canBook, canManage, onChanged }) {
                                 }
                               }}
                               className={`h-7 w-12 rounded-md text-[10px] font-medium transition-all ${
-                                isBooked
+                                isMine
+                                  ? "bg-brand-500/40 text-brand-50 ring-1 ring-brand-300/60"
+                                  : isBooked
                                   ? "bg-emerald-500/30 text-emerald-100 ring-1 ring-emerald-400/40"
                                   : isCompleted
                                   ? "bg-white/5 text-white/30"
                                   : "bg-white/5 text-white/55 hover:bg-brand-500/30 hover:text-brand-100 hover:ring-1 hover:ring-brand-400/40"
                               } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
-                              title={
-                                isBooked
-                                  ? `Booked by ${b.parentName} (${b.studentName})`
-                                  : "Click to book this slot"
-                              }
+                              title={title}
                             >
-                              {isBooked ? (
-                                b.studentName?.split(" ")[0]?.slice(0, 5) ||
-                                "✓"
-                              ) : (
-                                "free"
-                              )}
+                              {label}
                             </button>
                           </td>
                         );
@@ -440,6 +475,7 @@ function SessionDetail({ session, canBook, canManage, onChanged }) {
       <BookingList
         bookings={bookings}
         canManage={canManage}
+        isTeacher={isTeacher}
         onChanged={() => {
           refetch();
           onChanged?.();
@@ -452,6 +488,8 @@ function SessionDetail({ session, canBook, canManage, onChanged }) {
             session={session}
             teacher={bookingFor.teacher}
             slotStart={bookingFor.slotStart}
+            myStudents={myStudents}
+            allowStudentSearch={allowStudentSearch}
             onClose={() => {
               setStudentSearchOpen(false);
               setBookingFor(null);
@@ -495,15 +533,21 @@ function Tab({ active, onClick, children }) {
 
 // ---------- bookings list ----------
 
-function BookingList({ bookings, canManage, onChanged }) {
+function BookingList({ bookings, canManage, isTeacher, onChanged }) {
   const [q, setQ] = useState("");
-  const filtered = bookings.filter(
+  // Only surface rows the caller has identity on. Anonymized rows for
+  // parents/students/teachers are still useful inside the slot grid above,
+  // but a list of "•" entries is noise here.
+  const visible = canManage
+    ? bookings
+    : bookings.filter((b) => b.mine || (!b.anonymized && b.studentName));
+  const filtered = visible.filter(
     (b) =>
       !q ||
-      b.studentName.toLowerCase().includes(q.toLowerCase()) ||
-      b.teacherName.toLowerCase().includes(q.toLowerCase()) ||
-      b.parentName.toLowerCase().includes(q.toLowerCase()) ||
-      b.slotStart.includes(q)
+      (b.studentName || "").toLowerCase().includes(q.toLowerCase()) ||
+      (b.teacherName || "").toLowerCase().includes(q.toLowerCase()) ||
+      (b.parentName || "").toLowerCase().includes(q.toLowerCase()) ||
+      (b.slotStart || "").includes(q)
   );
 
   async function setStatus(b, status) {
@@ -512,8 +556,8 @@ function BookingList({ bookings, canManage, onChanged }) {
   }
 
   async function cancel(b) {
-    if (!confirm(`Cancel ${b.parentName}'s slot with ${b.teacherName}?`))
-      return;
+    const who = b.parentName || b.studentName || "this slot";
+    if (!confirm(`Cancel ${who}'s slot with ${b.teacherName}?`)) return;
     await endpoints.ptmBookingCancel(b.id);
     onChanged?.();
   }
@@ -522,6 +566,13 @@ function BookingList({ bookings, canManage, onChanged }) {
     return (
       <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-xs text-white/45">
         No bookings yet for this session — click any free slot above to book.
+      </div>
+    );
+  }
+  if (filtered.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-xs text-white/45">
+        You have no bookings yet — click any free slot above to book.
       </div>
     );
   }
@@ -572,9 +623,9 @@ function BookingList({ bookings, canManage, onChanged }) {
             </div>
             <div className="min-w-0">
               <div className="truncate text-[11px] text-white/65">
-                {b.parentName}
+                {b.parentName || (b.anonymized ? "—" : "")}
               </div>
-              {b.parentPhone && (
+              {b.parentPhone && (canManage || b.mine) && (
                 <div className="flex items-center gap-1 text-[10px] text-white/45">
                   <PhoneCall size={9} /> {b.parentPhone}
                 </div>
@@ -588,29 +639,35 @@ function BookingList({ bookings, canManage, onChanged }) {
             >
               {b.status}
             </span>
-            {canManage && b.status === "confirmed" && (
+            {b.status === "confirmed" && (
               <div className="flex gap-1">
-                <button
-                  onClick={() => setStatus(b, "completed")}
-                  className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-emerald-500/15"
-                  title="Mark completed"
-                >
-                  <Check size={10} />
-                </button>
-                <button
-                  onClick={() => setStatus(b, "no-show")}
-                  className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-rose-500/15"
-                  title="Mark no-show"
-                >
-                  <Hand size={10} />
-                </button>
-                <button
-                  onClick={() => cancel(b)}
-                  className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-white/10"
-                  title="Cancel"
-                >
-                  <XCircle size={10} />
-                </button>
+                {(canManage || (isTeacher && b.mine)) && (
+                  <>
+                    <button
+                      onClick={() => setStatus(b, "completed")}
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-emerald-500/15"
+                      title="Mark completed"
+                    >
+                      <Check size={10} />
+                    </button>
+                    <button
+                      onClick={() => setStatus(b, "no-show")}
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-rose-500/15"
+                      title="Mark no-show"
+                    >
+                      <Hand size={10} />
+                    </button>
+                  </>
+                )}
+                {(canManage || b.mine) && (
+                  <button
+                    onClick={() => cancel(b)}
+                    className="inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] hover:bg-white/10"
+                    title="Cancel"
+                  >
+                    <XCircle size={10} />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -622,11 +679,20 @@ function BookingList({ bookings, canManage, onChanged }) {
 
 // ---------- Book slot modal (student picker) ----------
 
-function BookSlotModal({ session, teacher, slotStart, onClose, onBooked }) {
+function BookSlotModal({ session, teacher, slotStart, myStudents, allowStudentSearch, onClose, onBooked }) {
+  // For parents/students the student set is already known — skip the search
+  // UX entirely and let them pick (or auto-pick) from their linked children.
+  const restricted = !allowStudentSearch;
+  const eligibleMine = useMemo(
+    () => (myStudents || []).filter((s) => session.grades.includes(s.grade)),
+    [myStudents, session.grades]
+  );
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [students, setStudents] = useState([]);
-  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [selectedStudent, setSelectedStudent] = useState(
+    restricted && eligibleMine.length === 1 ? eligibleMine[0] : null
+  );
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
@@ -721,72 +787,116 @@ function BookSlotModal({ session, teacher, slotStart, onClose, onBooked }) {
         </div>
 
         <div className="space-y-3">
-          <label className="block">
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-white/55">
-              Search student
-            </div>
-            <input
-              autoFocus
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                if (selectedStudent) setSelectedStudent(null);
-              }}
-              placeholder="Type student name or ID…"
-              className={input}
-            />
-            {selectedStudent ? (
-              <div className="mt-2 flex items-center gap-2 rounded-lg border border-brand-400/30 bg-brand-500/10 p-2 text-xs">
-                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-accent-violet text-[10px] font-bold">
-                  {selectedStudent.avatar}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">
-                    {selectedStudent.name}
-                  </div>
-                  <div className="truncate text-[10px] text-white/55">
-                    {selectedStudent.id} · Grade {selectedStudent.grade}-
-                    {selectedStudent.section} · Parent:{" "}
-                    {selectedStudent.parent}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedStudent(null);
-                    setQuery("");
-                  }}
-                  className="rounded p-1 text-white/55 hover:bg-white/10"
-                >
-                  <X size={12} />
-                </button>
+          {restricted ? (
+            <div>
+              <div className="mb-1 text-[10px] uppercase tracking-wider text-white/55">
+                Book this slot for
               </div>
-            ) : students.length > 0 ? (
-              <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-white/10 bg-black/30">
-                {students.slice(0, 12).map((s) => (
+              {eligibleMine.length === 0 ? (
+                <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2 text-xs text-amber-200">
+                  None of your linked students are in this session's audience
+                  (Grades {session.grades.join(", ")}). Ask the admin to link
+                  the correct student record.
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  {eligibleMine.map((s) => {
+                    const on = selectedStudent?.id === s.id;
+                    return (
+                      <button
+                        type="button"
+                        key={s.id}
+                        onClick={() => setSelectedStudent(s)}
+                        className={`flex w-full items-center gap-2 rounded-lg border px-2 py-1.5 text-left text-xs transition-colors ${
+                          on
+                            ? "border-brand-400/40 bg-brand-500/15"
+                            : "border-white/10 bg-white/[0.03] hover:bg-white/10"
+                        }`}
+                      >
+                        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-accent-violet text-[10px] font-bold">
+                          {s.name?.[0] || "S"}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-medium">{s.name}</div>
+                          <div className="truncate text-[10px] text-white/55">
+                            {s.id} · G{s.grade}{s.section ? `-${s.section}` : ""}
+                          </div>
+                        </div>
+                        {on && <Check size={12} className="text-brand-200" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <label className="block">
+              <div className="mb-1 text-[10px] uppercase tracking-wider text-white/55">
+                Search student
+              </div>
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  if (selectedStudent) setSelectedStudent(null);
+                }}
+                placeholder="Type student name or ID…"
+                className={input}
+              />
+              {selectedStudent ? (
+                <div className="mt-2 flex items-center gap-2 rounded-lg border border-brand-400/30 bg-brand-500/10 p-2 text-xs">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-accent-violet text-[10px] font-bold">
+                    {selectedStudent.avatar}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium">
+                      {selectedStudent.name}
+                    </div>
+                    <div className="truncate text-[10px] text-white/55">
+                      {selectedStudent.id} · Grade {selectedStudent.grade}-
+                      {selectedStudent.section} · Parent:{" "}
+                      {selectedStudent.parent}
+                    </div>
+                  </div>
                   <button
                     type="button"
-                    key={s.id}
                     onClick={() => {
-                      setSelectedStudent(s);
+                      setSelectedStudent(null);
                       setQuery("");
                     }}
-                    className="flex w-full items-center gap-2 border-b border-white/5 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-white/5"
+                    className="rounded p-1 text-white/55 hover:bg-white/10"
                   >
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-accent-violet text-[9px] font-bold">
-                      {s.avatar}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{s.name}</div>
-                      <div className="truncate text-[10px] text-white/55">
-                        {s.id} · G{s.grade}-{s.section}
-                      </div>
-                    </div>
+                    <X size={12} />
                   </button>
-                ))}
-              </div>
-            ) : null}
-          </label>
+                </div>
+              ) : students.length > 0 ? (
+                <div className="mt-2 max-h-44 overflow-y-auto rounded-lg border border-white/10 bg-black/30">
+                  {students.slice(0, 12).map((s) => (
+                    <button
+                      type="button"
+                      key={s.id}
+                      onClick={() => {
+                        setSelectedStudent(s);
+                        setQuery("");
+                      }}
+                      className="flex w-full items-center gap-2 border-b border-white/5 px-2 py-1.5 text-left text-xs last:border-0 hover:bg-white/5"
+                    >
+                      <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-accent-violet text-[9px] font-bold">
+                        {s.avatar}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{s.name}</div>
+                        <div className="truncate text-[10px] text-white/55">
+                          {s.id} · G{s.grade}-{s.section}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </label>
+          )}
 
           <label className="block">
             <div className="mb-1 text-[10px] uppercase tracking-wider text-white/55">

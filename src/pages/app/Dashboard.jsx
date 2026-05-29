@@ -216,14 +216,33 @@ export default function Dashboard() {
           }
           if (att !== undefined) {
             const isSelf = att && typeof att === "object" && att.self;
+            const isParent = att && typeof att === "object" && att.parent;
+            let label = "Attendance today";
+            let value = `${att}%`;
+            if (isSelf) {
+              label = "Your attendance";
+              value = att.status;
+            } else if (isParent) {
+              const present = att.children.filter(
+                (c) => c.status === "Present"
+              ).length;
+              label =
+                att.children.length === 1
+                  ? `${att.children[0].name.split(" ")[0]}'s attendance`
+                  : "Children present";
+              value =
+                att.children.length === 1
+                  ? att.children[0].status
+                  : `${present}/${att.children.length}`;
+            }
             cards.push(
               <StatCard
                 key="at"
                 idx={idx++}
                 icon={CalendarCheck}
-                label={isSelf ? "Your attendance" : "Attendance today"}
-                value={isSelf ? att.status : `${att}%`}
-                delta={isSelf ? null : "+0.8%"}
+                label={label}
+                value={value}
+                delta={isSelf || isParent ? null : "+0.8%"}
                 tint="radial-gradient(circle, rgba(255,94,196,0.35), transparent 60%)"
               />
             );

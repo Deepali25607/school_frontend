@@ -51,6 +51,7 @@ export default function Settings() {
       {/* Available to every signed-in user */}
       <ProfileCard />
       <PasswordCard />
+      <TwoFactorCard />
       <NotificationsCard />
       <AppearanceCard />
 
@@ -332,6 +333,150 @@ function PasswordCard() {
           </button>
         </div>
       </form>
+    </SectionCard>
+  );
+}
+
+// ============ TWO-FACTOR AUTH ============
+
+function TwoFactorCard() {
+  const { user, refreshUser } = useAuth();
+  const enabled = !!user?.twoFactorEnabled;
+  const [stage, setStage] = useState("idle"); // idle | setup | disabling
+  const [setupData, setSetupData] = useState(null);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const inputCls =
+    "w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50";
+
+  const startSetup = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await endpoints.twoFactorSetup();
+      setSetupData(res);
+      setStage("setup");
+      setCode("");
+    } catch (e) {
+      setErr(e?.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmEnable = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await endpoints.twoFactorEnable(code);
+      await refreshUser();
+      setStage("idle");
+      setSetupData(null);
+    } catch (e) {
+      setErr(e?.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmDisable = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await endpoints.twoFactorDisable(password);
+      await refreshUser();
+      setStage("idle");
+      setPassword("");
+    } catch (e) {
+      setErr(e?.response?.data?.error || e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SectionCard
+      icon={ShieldCheck}
+      iconTint="from-emerald-500/30 to-brand-500/30"
+      title="Two-factor authentication"
+      subtitle="Add a time-based one-time code (TOTP) from an authenticator app"
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className={`rounded-md px-2 py-0.5 text-[11px] font-medium ring-1 ${
+            enabled
+              ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30"
+              : "bg-white/10 text-white/60 ring-white/20"
+          }`}
+        >
+          {enabled ? "Enabled" : "Not enabled"}
+        </span>
+        {!enabled && stage === "idle" && (
+          <button onClick={startSetup} disabled={busy} className="ml-auto btn-primary px-3 py-1.5 text-sm disabled:opacity-50">
+            {busy ? "Starting…" : "Enable 2FA"}
+          </button>
+        )}
+        {enabled && stage === "idle" && (
+          <button onClick={() => { setStage("disabling"); setErr(null); }} className="ml-auto rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 py-1.5 text-sm font-medium text-rose-200 hover:bg-rose-500/20">
+            Disable
+          </button>
+        )}
+      </div>
+
+      {stage === "setup" && setupData && (
+        <form onSubmit={confirmEnable} className="mt-4 space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <div className="text-sm text-white/70">
+            1. Add this account to your authenticator app (Google Authenticator, Authy, 1Password…).
+          </div>
+          <div className="rounded-lg bg-black/30 p-3">
+            <div className="text-[11px] uppercase tracking-wider text-white/45">Manual entry key</div>
+            <div className="mt-1 break-all font-mono text-sm text-brand-200">{setupData.secret}</div>
+            <div className="mt-2 text-[11px] uppercase tracking-wider text-white/45">otpauth URL</div>
+            <div className="mt-1 break-all font-mono text-[11px] text-white/55">{setupData.otpauthUrl}</div>
+          </div>
+          <div className="text-sm text-white/70">2. Enter the 6-digit code your app shows:</div>
+          <input
+            inputMode="numeric"
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="••••••"
+            className={`${inputCls} text-center font-mono text-lg tracking-[0.4em]`}
+          />
+          {err && <div className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-200 ring-1 ring-rose-400/30"><AlertTriangle size={12} className="mr-1 inline" />{err}</div>}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { setStage("idle"); setSetupData(null); }} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">Cancel</button>
+            <button type="submit" disabled={busy || code.length !== 6} className="btn-primary px-4 py-2 text-sm disabled:opacity-50">
+              {busy ? "Verifying…" : "Verify & enable"}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {stage === "disabling" && (
+        <form onSubmit={confirmDisable} className="mt-4 space-y-3 rounded-xl border border-rose-400/20 bg-rose-500/[0.04] p-4">
+          <div className="text-sm text-white/70">Confirm your password to turn off two-factor authentication.</div>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Account password"
+            autoComplete="current-password"
+            className={inputCls}
+          />
+          {err && <div className="rounded-lg bg-rose-500/15 px-3 py-1.5 text-xs text-rose-200 ring-1 ring-rose-400/30"><AlertTriangle size={12} className="mr-1 inline" />{err}</div>}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { setStage("idle"); setPassword(""); }} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm hover:bg-white/10">Cancel</button>
+            <button type="submit" disabled={busy || !password} className="rounded-lg bg-gradient-to-r from-rose-500 to-accent-pink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+              {busy ? "Disabling…" : "Disable 2FA"}
+            </button>
+          </div>
+        </form>
+      )}
     </SectionCard>
   );
 }

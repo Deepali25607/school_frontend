@@ -231,6 +231,91 @@ export default function AppLayout() {
                   )}
                 </AnimatePresence>
               </button>
+            ) : user?.scope?.teacherId ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/app/teachers/${user.scope.teacherId}`)}
+                className="flex flex-1 items-center gap-3 rounded-lg text-left transition hover:bg-white/5"
+                title="Open my teacher profile"
+              >
+                <Avatar
+                  photoUrl={user?.photoUrl}
+                  initials={user?.avatar || "U"}
+                  size={36}
+                  fallbackClass="from-brand-500 to-accent-cyan"
+                />
+                <AnimatePresence>
+                  {open && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="min-w-0 flex-1"
+                    >
+                      <div className="truncate text-sm font-semibold">
+                        {user?.name}
+                      </div>
+                      <div className="flex items-center gap-1.5 truncate text-[11px] uppercase tracking-wider text-white/50">
+                        {user?.role}
+                        <span className="rounded-full bg-brand-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-brand-200 ring-1 ring-brand-400/30">
+                          {user.scope.classes?.length || 0} {user.scope.classes?.length === 1 ? "class" : "classes"}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[10px] text-brand-300/80">
+                        {user.scope.subjects?.length
+                          ? user.scope.subjects.slice(0, 2).join(", ")
+                          : "View my profile →"}
+                        {user.scope.studentCount
+                          ? ` · ${user.scope.studentCount} students`
+                          : ""}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </button>
+            ) : user?.scope?.children?.length ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/app/students/${user.scope.children[0].id}`)}
+                className="flex flex-1 items-center gap-3 rounded-lg text-left transition hover:bg-white/5"
+                title={`Open ${user.scope.children[0].name}'s profile`}
+              >
+                <Avatar
+                  photoUrl={user?.photoUrl}
+                  initials={user?.avatar || "U"}
+                  size={36}
+                  fallbackClass="from-amber-500 to-accent-pink"
+                />
+                <AnimatePresence>
+                  {open && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="min-w-0 flex-1"
+                    >
+                      <div className="truncate text-sm font-semibold">
+                        {user?.name}
+                      </div>
+                      <div className="flex items-center gap-1.5 truncate text-[11px] uppercase tracking-wider text-white/50">
+                        {user?.role}
+                        <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200 ring-1 ring-amber-400/30">
+                          {user.scope.children.length === 1
+                            ? `Parent · 1 child`
+                            : `Parent · ${user.scope.children.length} children`}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[10px] text-amber-300/80">
+                        {user.scope.children
+                          .map((c) => `${c.name.split(" ")[0]} (G${c.grade}-${c.section})`)
+                          .slice(0, 2)
+                          .join(", ")}
+                        {user.scope.children.length > 2 ? `, +${user.scope.children.length - 2} more` : ""}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </button>
             ) : (
               <>
                 <Avatar

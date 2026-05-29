@@ -14,6 +14,7 @@ import {
   FileText,
   Library,
   Building2,
+  Bus,
   Activity,
   AlertTriangle,
   Droplet,
@@ -88,6 +89,7 @@ export default function StudentProfile() {
       "achievements.changed",
       "library.changed",
       "hostel.changed",
+      "transport.changed",
     ],
     () => refetch()
   );
@@ -106,18 +108,30 @@ export default function StudentProfile() {
     return <ErrorState error={error} onRetry={refetch} />;
   }
 
-  const { student, health, discipline, documents, exams, library, hostel, achievements, cafeteria, billing } = data;
+  const { student, health, discipline, documents, exams, library, hostel, transport, achievements, cafeteria, billing } = data;
   const houseGrad = HOUSE_COLORS[student.house] || "from-brand-500 to-accent-pink";
   const isBatchmateView = data.viewMode === "batchmate";
 
   return (
     <div className="space-y-5">
-      <button
-        onClick={() => navigate(-1)}
-        className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-white"
-      >
-        <ArrowLeft size={14} /> Back
-      </button>
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1 text-xs text-white/60 hover:text-white"
+        >
+          <ArrowLeft size={14} /> Back
+        </button>
+        {!isBatchmateView && (
+          <Link
+            to={`/print/report-card/${student.id}`}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-brand-500 to-accent-violet px-3 py-1.5 text-xs font-semibold text-white shadow shadow-brand-500/20"
+          >
+            <FileText size={12} /> Report card
+          </Link>
+        )}
+      </div>
 
       {isBatchmateView && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
@@ -229,7 +243,7 @@ export default function StudentProfile() {
         <ConductSection discipline={discipline} achievements={achievements} />
       )}
       {tab === "records" && (
-        <RecordsSection documents={documents} library={library} hostel={hostel} billing={billing} />
+        <RecordsSection documents={documents} library={library} hostel={hostel} transport={transport} billing={billing} />
       )}
       {tab === "activity" && (
         <ActivitySection activity={data.activity || []} />
@@ -272,7 +286,7 @@ function TabButton({ active, onClick, icon: Icon, children }) {
 
 // =================== OVERVIEW ===================
 function OverviewSection({ data }) {
-  const { health, discipline, exams, library, hostel, documents } = data;
+  const { health, discipline, exams, library, hostel, transport, documents } = data;
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {/* Academic snapshot */}
@@ -372,6 +386,32 @@ function OverviewSection({ data }) {
           </>
         ) : (
           <div className="text-xs text-white/40">Day scholar — no hostel assignment</div>
+        )}
+      </Card>
+
+      {/* Transport snapshot */}
+      <Card title="Transport" icon={Bus} tint="from-sky-500/20" link="/app/transport">
+        {transport ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ background: transport.color }}
+              />
+              <span className="font-display text-base font-bold">{transport.routeName}</span>
+              <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ${transport.status === "Delayed" ? "bg-amber-500/15 text-amber-300 ring-amber-400/30" : "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30"}`}>
+                {transport.status}
+              </span>
+            </div>
+            <div className="mt-1 text-xs text-white/55">
+              Stop {transport.stop.name} · ETA {transport.stop.eta} · stop {transport.stop.order}/{transport.totalStops}
+            </div>
+            <div className="mt-1 text-[11px] text-white/45">
+              {transport.bus.plate} · {transport.bus.driver}
+            </div>
+          </>
+        ) : (
+          <div className="text-xs text-white/40">Not using school transport</div>
         )}
       </Card>
     </div>
@@ -683,7 +723,7 @@ function ConductSection({ discipline, achievements }) {
 }
 
 // =================== RECORDS ===================
-function RecordsSection({ documents, library, hostel, billing }) {
+function RecordsSection({ documents, library, hostel, transport, billing }) {
   return (
     <div className="space-y-4">
       {billing && (
@@ -803,6 +843,36 @@ function RecordsSection({ documents, library, hostel, billing }) {
           </div>
         ) : (
           <div className="text-xs text-white/40">Day scholar — no hostel assignment.</div>
+        )}
+      </Card>
+
+      <Card title="Transport" icon={Bus} tint="from-sky-500/20" link="/app/transport">
+        {transport ? (
+          <div className="flex items-center gap-4">
+            <div
+              className="flex h-14 w-14 items-center justify-center rounded-xl font-display text-white shadow-glow"
+              style={{ background: `linear-gradient(135deg, ${transport.color}, #5b81ff)` }}
+            >
+              <Bus size={22} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <div className="font-display text-lg font-semibold">{transport.routeName}</div>
+                <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ${transport.status === "Delayed" ? "bg-amber-500/15 text-amber-300 ring-amber-400/30" : "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30"}`}>
+                  {transport.status}
+                </span>
+              </div>
+              <div className="text-xs text-white/55">
+                Pickup at <span className="text-white/80">{transport.stop.name}</span> · ETA {transport.stop.eta} · stop {transport.stop.order} of {transport.totalStops}
+              </div>
+              <div className="mt-0.5 text-[11px] text-white/45">
+                Bus {transport.bus.plate} · {transport.bus.driver}
+                {transport.bus.helper ? ` · helper ${transport.bus.helper}` : ""}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="text-xs text-white/40">Not using school transport — self drop-off.</div>
         )}
       </Card>
     </div>

@@ -107,13 +107,15 @@ export default function Discipline() {
       {error && <ErrorState error={error} onRetry={refetch} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          icon={Gavel}
-          label="Open + Review"
-          value={loading ? "—" : summary?.openCount}
-          tint="from-rose-500/30"
-          pulse={summary?.openCount > 0}
-        />
+        <button type="button" onClick={() => setStatus(status === "Open" ? "all" : "Open")} className={`block w-full rounded-2xl text-left transition-all ${status === "Open" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Gavel}
+            label="Open + Review"
+            value={loading ? "—" : summary?.openCount}
+            tint="from-rose-500/30"
+            pulse={summary?.openCount > 0}
+          />
+        </button>
         <StatTile
           icon={Clock}
           label="This week"

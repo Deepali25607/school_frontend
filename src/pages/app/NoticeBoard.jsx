@@ -20,7 +20,20 @@ import {
   Sparkles as SparklesIcon,
   Paperclip,
   Trash2,
+  GraduationCap,
 } from "lucide-react";
+
+const ALL_GRADES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const ALL_SECTIONS = ["A", "B", "C", "D"];
+
+function formatGradeTargets(grades, sections) {
+  const g = Array.isArray(grades) ? grades : [];
+  const s = Array.isArray(sections) ? sections : [];
+  if (g.length === 0) return "Whole school";
+  const gradeStr =
+    g.length <= 3 ? g.map((x) => `Gr ${x}`).join(", ") : `${g.length} grades`;
+  return s.length > 0 ? `${gradeStr} · Sec ${s.join("/")}` : gradeStr;
+}
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
 import { useRealtime } from "../../lib/useRealtime.js";
@@ -60,6 +73,7 @@ export default function NoticeBoard() {
   const [audience, setAudience] = useState("all");
   const [showExpired, setShowExpired] = useState(false);
   const [mineOnly, setMineOnly] = useState(false);
+  const [view, setView] = useState("all"); // KPI-card driven view: all | pinned | expiring | ack
   const [creating, setCreating] = useState(false);
   const [opened, setOpened] = useState(null);
 
@@ -91,8 +105,14 @@ export default function NoticeBoard() {
   const categories = data?.categories || [];
   const audiences = data?.audiences || [];
 
-  const pinned = items.filter((n) => n.pinned);
-  const rest = items.filter((n) => !n.pinned);
+  const viewItems = items.filter((n) => {
+    if (view === "pinned") return n.pinned;
+    if (view === "expiring") return !n.expired && n.daysToExpiry <= 3;
+    if (view === "ack") return !n.ackedByMe;
+    return true;
+  });
+  const pinned = viewItems.filter((n) => n.pinned);
+  const rest = viewItems.filter((n) => !n.pinned);
 
   return (
     <div className="space-y-5">
@@ -110,35 +130,43 @@ export default function NoticeBoard() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          icon={Megaphone}
-          label="Live notices"
-          value={summary ? summary.live : "—"}
-          tint="from-brand-500/30"
-        />
-        <StatTile
-          icon={Pin}
-          label="Pinned"
-          value={summary ? summary.pinned : "—"}
-          tint="from-amber-500/30"
-          accent="text-amber-300"
-        />
-        <StatTile
-          icon={Clock}
-          label="Expiring (≤3d)"
-          value={summary ? summary.expiringSoon : "—"}
-          tint="from-rose-500/30"
-          accent="text-rose-300"
-          pulse={(summary?.expiringSoon || 0) > 0}
-        />
-        <StatTile
-          icon={Bell}
-          label="Need your ack"
-          value={summary ? summary.unackedForMe : "—"}
-          tint="from-accent-pink/30"
-          accent="text-pink-300"
-          pulse={(summary?.unackedForMe || 0) > 0}
-        />
+        <button type="button" onClick={() => setView("all")} className={`block w-full rounded-2xl text-left transition-all ${view === "all" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Megaphone}
+            label="Live notices"
+            value={summary ? summary.live : "—"}
+            tint="from-brand-500/30"
+          />
+        </button>
+        <button type="button" onClick={() => setView(view === "pinned" ? "all" : "pinned")} className={`block w-full rounded-2xl text-left transition-all ${view === "pinned" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Pin}
+            label="Pinned"
+            value={summary ? summary.pinned : "—"}
+            tint="from-amber-500/30"
+            accent="text-amber-300"
+          />
+        </button>
+        <button type="button" onClick={() => setView(view === "expiring" ? "all" : "expiring")} className={`block w-full rounded-2xl text-left transition-all ${view === "expiring" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Clock}
+            label="Expiring (≤3d)"
+            value={summary ? summary.expiringSoon : "—"}
+            tint="from-rose-500/30"
+            accent="text-rose-300"
+            pulse={(summary?.expiringSoon || 0) > 0}
+          />
+        </button>
+        <button type="button" onClick={() => setView(view === "ack" ? "all" : "ack")} className={`block w-full rounded-2xl text-left transition-all ${view === "ack" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Bell}
+            label="Need your ack"
+            value={summary ? summary.unackedForMe : "—"}
+            tint="from-accent-pink/30"
+            accent="text-pink-300"
+            pulse={(summary?.unackedForMe || 0) > 0}
+          />
+        </button>
       </div>
 
       {/* Filters */}
@@ -290,6 +318,7 @@ export default function NoticeBoard() {
       <AnimatePresence>
         {creating && (
           <NewNoticeModal
+            user={user}
             categories={categories}
             audiences={audiences}
             onClose={() => setCreating(false)}
@@ -421,10 +450,16 @@ function NoticeCard({ notice, idx, emphasize, onOpen }) {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-white/55">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1">
             <Users2 size={11} /> {AUDIENCE_LABELS[n.audience] || n.audience}
           </span>
+          {Array.isArray(n.targetGrades) && n.targetGrades.length > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-1.5 py-0.5 text-brand-200 ring-1 ring-brand-400/25">
+              <GraduationCap size={10} />
+              {formatGradeTargets(n.targetGrades, n.targetSections)}
+            </span>
+          )}
           <span>·</span>
           <span>by {n.postedBy}</span>
         </div>
@@ -535,6 +570,12 @@ function NoticeDetail({ notice, canPin, canDelete, onClose, onChanged }) {
               <span className="inline-flex items-center gap-1">
                 <Users2 size={11} /> {AUDIENCE_LABELS[n.audience] || n.audience}
               </span>
+              {Array.isArray(n.targetGrades) && n.targetGrades.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-1.5 py-0.5 text-brand-200 ring-1 ring-brand-400/25">
+                  <GraduationCap size={11} />
+                  {formatGradeTargets(n.targetGrades, n.targetSections)}
+                </span>
+              )}
               <span>·</span>
               <span>by {n.postedBy}</span>
               <span>·</span>
@@ -662,7 +703,7 @@ function NoticeDetail({ notice, canPin, canDelete, onClose, onChanged }) {
   );
 }
 
-function NewNoticeModal({ categories, audiences, onClose, onCreated }) {
+function NewNoticeModal({ user, categories, audiences, onClose, onCreated }) {
   const [form, setForm] = useState({
     title: "",
     body: "",
@@ -671,11 +712,28 @@ function NewNoticeModal({ categories, audiences, onClose, onCreated }) {
     pinned: false,
     expiresInDays: 14,
     attachmentUrl: "",
+    targetGrades: [],
+    targetSections: [],
   });
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState(null);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const toggleIn = (key, value) =>
+    setForm((f) => ({
+      ...f,
+      [key]: f[key].includes(value)
+        ? f[key].filter((v) => v !== value)
+        : [...f[key], value],
+    }));
+
+  // Teachers can only post grade-specific notices for grades they teach.
+  const isTeacher = user?.role === "teacher";
+  const teacherGrades = useMemo(() => {
+    const cls = user?.scope?.classes || [];
+    return [...new Set(cls.map((c) => Number(c.split("-")[0])))].sort((a, b) => a - b);
+  }, [user]);
+  const gradeChoices = isTeacher && teacherGrades.length ? teacherGrades : ALL_GRADES;
 
   async function submit(e) {
     e.preventDefault();
@@ -818,6 +876,85 @@ function NewNoticeModal({ categories, audiences, onClose, onCreated }) {
                 placeholder="https://…"
               />
             </label>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-white/55">
+                  Target classes
+                </div>
+                <div className="mt-0.5 text-[11px] text-white/45">
+                  Leave empty to send to everyone in the audience above. Pick
+                  grade(s) to limit visibility to those classes only.
+                </div>
+              </div>
+              {form.targetGrades.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    set("targetGrades", []);
+                    set("targetSections", []);
+                  }}
+                  className="text-[11px] text-white/55 underline-offset-2 hover:text-white hover:underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            <div className="mt-2">
+              <div className="text-[10px] uppercase tracking-wider text-white/55">
+                Grades
+              </div>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {gradeChoices.map((g) => {
+                  const on = form.targetGrades.includes(g);
+                  return (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => toggleIn("targetGrades", g)}
+                      className={`rounded-full px-2.5 py-1 text-[11px] ring-1 transition-colors ${
+                        on
+                          ? "bg-brand-500/25 text-brand-100 ring-brand-400/40"
+                          : "bg-white/5 text-white/60 ring-white/10 hover:bg-white/10"
+                      }`}
+                    >
+                      Grade {g}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {form.targetGrades.length > 0 && (
+              <div className="mt-3">
+                <div className="text-[10px] uppercase tracking-wider text-white/55">
+                  Sections{" "}
+                  <span className="font-normal normal-case text-white/40">
+                    (leave empty for all sections)
+                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {ALL_SECTIONS.map((s) => {
+                    const on = form.targetSections.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => toggleIn("targetSections", s)}
+                        className={`rounded-full px-2.5 py-1 text-[11px] ring-1 transition-colors ${
+                          on
+                            ? "bg-emerald-500/25 text-emerald-100 ring-emerald-400/40"
+                            : "bg-white/5 text-white/60 ring-white/10 hover:bg-white/10"
+                        }`}
+                      >
+                        Section {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           <button

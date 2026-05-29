@@ -175,6 +175,7 @@ export default function Staff() {
   );
 
   useRealtime("staff.changed", () => refetch());
+  useRealtime("payroll.changed", () => refetch());
 
   const items = data?.items || [];
   const summary = data?.summary || {};
@@ -209,9 +210,9 @@ export default function Staff() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={UsersIcon} label="Total staff" value={summary.total ?? "—"} tone="text-brand-300" />
-        <StatTile icon={Check} label="Active" value={summary.active ?? "—"} tone="text-emerald-300" />
-        <StatTile icon={Calendar} label="On leave" value={summary.onLeave ?? "—"} tone="text-amber-300" />
+        <StatTile icon={UsersIcon} label="Total staff" value={summary.total ?? "—"} tone="text-brand-300" active={status === "all"} onClick={() => setStatus("all")} />
+        <StatTile icon={Check} label="Active" value={summary.active ?? "—"} tone="text-emerald-300" active={status === "Active"} onClick={() => setStatus(status === "Active" ? "all" : "Active")} />
+        <StatTile icon={Calendar} label="On leave" value={summary.onLeave ?? "—"} tone="text-amber-300" active={status === "On leave"} onClick={() => setStatus(status === "On leave" ? "all" : "On leave")} />
         <StatTile icon={Wallet} label="Monthly payroll" value={summary.payroll ? "₹" + summary.payroll.toLocaleString("en-IN") : "—"} tone="text-purple-300" />
       </div>
 
@@ -368,15 +369,26 @@ export default function Staff() {
 
 // ---------- list-level primitives ----------
 
-function StatTile({ icon: Icon, label, value, tone }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+function StatTile({ icon: Icon, label, value, tone, onClick, active }) {
+  const base = `rounded-2xl border p-4 text-left transition-all ${
+    active ? "border-brand-400/50 bg-white/[0.07] ring-1 ring-brand-400/40" : "border-white/10 bg-white/5"
+  }`;
+  const inner = (
+    <>
       <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-white/50">
         <Icon size={12} className={tone} /> {label}
       </div>
       <div className={`mt-2 text-2xl font-semibold ${tone}`}>{value}</div>
-    </div>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} className={`${base} w-full hover:bg-white/[0.09]`}>
+        {inner}
+      </button>
+    );
+  }
+  return <div className={base}>{inner}</div>;
 }
 
 function CategoryChip({ active, label, icon: Icon, count, tone, onClick }) {
@@ -569,6 +581,39 @@ function ProfileDrawer({ staff, canEdit, onClose, onEdit, onDelete }) {
             <KV k="Type" v={s.employmentType} />
             <KV k="Salary" v={fmtINR(s.salary)} icon={Wallet} />
           </Section>
+          {s.payroll && (
+            <Section title="Compensation & Payroll">
+              <KV k="Gross (monthly)" v={fmtINR(s.payroll.gross)} />
+              <KV k="Deductions" v={<span className="text-rose-300">{fmtINR(s.payroll.totalDeductions)}</span>} />
+              <KV k="Net pay" v={<span className="text-emerald-300 font-semibold">{fmtINR(s.payroll.net)}</span>} />
+              <KV k="Pay via" v={s.payroll.paymentMethod} />
+              {s.payroll.paymentMethod === "Bank Transfer" && (
+                <KV k="Account" v={s.payroll.account ? `${s.payroll.account} · ${s.payroll.bank || ""}` : "—"} />
+              )}
+              {s.payroll.paymentMethod === "UPI" && (
+                <KV k="UPI ID" v={s.payroll.upiId || "—"} />
+              )}
+              {s.payroll.advances?.outstanding > 0 && (
+                <KV
+                  k="Salary advance"
+                  v={
+                    <span className="text-amber-300">
+                      {fmtINR(s.payroll.advances.outstanding)} left · {fmtINR(s.payroll.deductions?.advance)}/mo
+                    </span>
+                  }
+                />
+              )}
+              <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-white/10 pt-2 text-[11px] text-white/55">
+                <span>Basic {fmtINR(s.payroll.components?.base)}</span>
+                <span>HRA {fmtINR(s.payroll.components?.hra)}</span>
+                <span>Transport {fmtINR(s.payroll.components?.transport)}</span>
+                <span>Special {fmtINR(s.payroll.components?.special)}</span>
+                {s.payroll.components?.bonus > 0 && <span>Bonus {fmtINR(s.payroll.components.bonus)}</span>}
+                {s.payroll.components?.overtime > 0 && <span>Overtime {fmtINR(s.payroll.components.overtime)}</span>}
+                {s.payroll.deductions?.advance > 0 && <span className="text-rose-300/80">Advance −{fmtINR(s.payroll.deductions.advance)}</span>}
+              </div>
+            </Section>
+          )}
           {s.emergencyContact && (s.emergencyContact.name || s.emergencyContact.phone) && (
             <Section title="Emergency contact">
               <KV k="Name" v={s.emergencyContact.name || "—"} />

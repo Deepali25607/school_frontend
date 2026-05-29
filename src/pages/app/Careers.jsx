@@ -81,6 +81,7 @@ export default function Careers() {
   const [track, setTrack] = useState("all");
   const [counsellor, setCounsellor] = useState("all");
   const [grade, setGrade] = useState("all");
+  const [appFilter, setAppFilter] = useState("all"); // KPI-card driven: all | withApps | admitted
   const [openStudentId, setOpenStudentId] = useState(null);
 
   useEffect(() => {
@@ -100,7 +101,11 @@ export default function Careers() {
 
   useRealtime("careers.changed", () => refetch());
 
-  const profiles = data?.items || [];
+  const profiles = (data?.items || []).filter((p) => {
+    if (appFilter === "admitted") return p.admittedCount > 0;
+    if (appFilter === "withApps") return p.applicationsCount > 0;
+    return true;
+  });
   const summary = data?.summary;
   const tracks = data?.tracks || [];
   const counsellors = data?.counsellors || [];
@@ -128,35 +133,41 @@ export default function Careers() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          icon={Users2}
-          label="Senior profiles"
-          value={summary ? summary.profilesCount : "—"}
-          subValue={
-            summary ? `${summary.seniors} students in Grades 11-12` : null
-          }
-          tint="from-brand-500/30"
-        />
-        <StatTile
-          icon={Send}
-          label="Applications open"
-          value={summary ? summary.applied + summary.waitlisted : "—"}
-          subValue={
-            summary
-              ? `${summary.planning} planning · ${summary.waitlisted} waitlisted`
-              : null
-          }
-          tint="from-amber-500/30"
-          accent="text-amber-300"
-        />
-        <StatTile
-          icon={CheckCircle2}
-          label="Admitted"
-          value={summary ? summary.admitted : "—"}
-          subValue={summary ? `${summary.enrolled} enrolled` : null}
-          tint="from-emerald-500/30"
-          accent="text-emerald-300"
-        />
+        <button type="button" onClick={() => setAppFilter("all")} className={`block w-full rounded-2xl text-left transition-all ${appFilter === "all" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Users2}
+            label="Senior profiles"
+            value={summary ? summary.profilesCount : "—"}
+            subValue={
+              summary ? `${summary.seniors} students in Grades 11-12` : null
+            }
+            tint="from-brand-500/30"
+          />
+        </button>
+        <button type="button" onClick={() => setAppFilter(appFilter === "withApps" ? "all" : "withApps")} className={`block w-full rounded-2xl text-left transition-all ${appFilter === "withApps" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Send}
+            label="Applications open"
+            value={summary ? summary.applied + summary.waitlisted : "—"}
+            subValue={
+              summary
+                ? `${summary.planning} planning · ${summary.waitlisted} waitlisted`
+                : null
+            }
+            tint="from-amber-500/30"
+            accent="text-amber-300"
+          />
+        </button>
+        <button type="button" onClick={() => setAppFilter(appFilter === "admitted" ? "all" : "admitted")} className={`block w-full rounded-2xl text-left transition-all ${appFilter === "admitted" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={CheckCircle2}
+            label="Admitted"
+            value={summary ? summary.admitted : "—"}
+            subValue={summary ? `${summary.enrolled} enrolled` : null}
+            tint="from-emerald-500/30"
+            accent="text-emerald-300"
+          />
+        </button>
         <StatTile
           icon={Calendar}
           label="Follow-ups (14d)"

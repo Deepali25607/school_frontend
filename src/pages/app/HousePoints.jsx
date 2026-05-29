@@ -123,19 +123,25 @@ export default function HousePoints() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          icon={Crown}
-          label="Leading house"
-          value={summary?.leader?.house || "—"}
-          subValue={
-            summary?.leader
-              ? `${summary.leader.points} pts · +${summary.leader.leadOver} over #2`
-              : null
-          }
-          tint="from-amber-500/30"
-          accent={HOUSE_PALETTES[summary?.leader?.house]?.text || "text-amber-300"}
-          pulse
-        />
+        <button
+          type="button"
+          onClick={() => summary?.leader && setHouse(house === summary.leader.house ? "all" : summary.leader.house)}
+          className={`block w-full rounded-2xl text-left transition-all ${house !== "all" && house === summary?.leader?.house ? "ring-1 ring-brand-400/50" : ""}`}
+        >
+          <StatTile
+            icon={Crown}
+            label="Leading house"
+            value={summary?.leader?.house || "—"}
+            subValue={
+              summary?.leader
+                ? `${summary.leader.points} pts · +${summary.leader.leadOver} over #2`
+                : null
+            }
+            tint="from-amber-500/30"
+            accent={HOUSE_PALETTES[summary?.leader?.house]?.text || "text-amber-300"}
+            pulse
+          />
+        </button>
         <StatTile
           icon={PlusCircle}
           label="Awards logged"

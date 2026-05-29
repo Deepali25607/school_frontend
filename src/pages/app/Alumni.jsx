@@ -137,33 +137,39 @@ export default function Alumni() {
           value={summary ? summary.total : "—"}
           tint="from-brand-500/30"
         />
-        <StatTile
-          icon={BadgeCheck}
-          label="Verified"
-          value={summary ? summary.verified : "—"}
-          tint="from-emerald-500/30"
-          accent="text-emerald-300"
-        />
-        <StatTile
-          icon={Heart}
-          label="Mentors"
-          value={summary ? summary.mentors : "—"}
-          tint="from-accent-pink/30"
-          accent="text-pink-300"
-          pulse={(summary?.mentors || 0) > 0}
-        />
-        <StatTile
-          icon={HandCoins}
-          label="Donations"
-          value={
-            summary
-              ? "₹" +
-                (summary.donationTotal || 0).toLocaleString("en-IN")
-              : "—"
-          }
-          tint="from-amber-500/30"
-          accent="text-amber-300"
-        />
+        <button type="button" onClick={() => setChip(chip === "verified" ? "all" : "verified")} className={`block w-full rounded-2xl text-left transition-all ${chip === "verified" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={BadgeCheck}
+            label="Verified"
+            value={summary ? summary.verified : "—"}
+            tint="from-emerald-500/30"
+            accent="text-emerald-300"
+          />
+        </button>
+        <button type="button" onClick={() => setChip(chip === "mentor" ? "all" : "mentor")} className={`block w-full rounded-2xl text-left transition-all ${chip === "mentor" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Heart}
+            label="Mentors"
+            value={summary ? summary.mentors : "—"}
+            tint="from-accent-pink/30"
+            accent="text-pink-300"
+            pulse={(summary?.mentors || 0) > 0}
+          />
+        </button>
+        <button type="button" onClick={() => setChip(chip === "donor" ? "all" : "donor")} className={`block w-full rounded-2xl text-left transition-all ${chip === "donor" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={HandCoins}
+            label="Donations"
+            value={
+              summary
+                ? "₹" +
+                  (summary.donationTotal || 0).toLocaleString("en-IN")
+                : "—"
+            }
+            tint="from-amber-500/30"
+            accent="text-amber-300"
+          />
+        </button>
       </div>
 
       {/* Featured mentors strip */}

@@ -146,21 +146,25 @@ export default function Scholarships() {
           value={summary ? summary.activeSchemes : "—"}
           tint="from-brand-500/30"
         />
-        <StatTile
-          icon={CheckCircle2}
-          label="Awarded"
-          value={summary ? summary.awarded : "—"}
-          tint="from-emerald-500/30"
-          accent="text-emerald-300"
-        />
-        <StatTile
-          icon={Hourglass}
-          label="Pending review"
-          value={summary ? summary.pending : "—"}
-          tint="from-amber-500/30"
-          accent="text-amber-300"
-          pulse={(summary?.pending || 0) > 0}
-        />
+        <button type="button" onClick={() => { setTab("applications"); setStatus(tab === "applications" && status === "Awarded" ? "all" : "Awarded"); }} className={`block w-full rounded-2xl text-left transition-all ${tab === "applications" && status === "Awarded" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={CheckCircle2}
+            label="Awarded"
+            value={summary ? summary.awarded : "—"}
+            tint="from-emerald-500/30"
+            accent="text-emerald-300"
+          />
+        </button>
+        <button type="button" onClick={() => { setTab("applications"); setStatus(tab === "applications" && status === "Under Review" ? "all" : "Under Review"); }} className={`block w-full rounded-2xl text-left transition-all ${tab === "applications" && status === "Under Review" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Hourglass}
+            label="Pending review"
+            value={summary ? summary.pending : "—"}
+            tint="from-amber-500/30"
+            accent="text-amber-300"
+            pulse={(summary?.pending || 0) > 0}
+          />
+        </button>
         <StatTile
           icon={PiggyBank}
           label="Committed (fixed)"

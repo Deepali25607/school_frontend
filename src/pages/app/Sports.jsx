@@ -166,21 +166,25 @@ export default function Sports() {
           }
           tint="from-brand-500/30"
         />
-        <StatTile
-          icon={CirclePlay}
-          label="Live matches"
-          value={summary ? summary.liveMatches : "—"}
-          tint="from-emerald-500/30"
-          accent="text-emerald-300"
-          pulse={(summary?.liveMatches || 0) > 0}
-        />
-        <StatTile
-          icon={Calendar}
-          label="Upcoming matches"
-          value={summary ? summary.upcomingMatches : "—"}
-          tint="from-amber-500/30"
-          accent="text-amber-300"
-        />
+        <button type="button" onClick={() => setStatus(status === "Ongoing" ? "all" : "Ongoing")} className={`block w-full rounded-2xl text-left transition-all ${status === "Ongoing" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={CirclePlay}
+            label="Live matches"
+            value={summary ? summary.liveMatches : "—"}
+            tint="from-emerald-500/30"
+            accent="text-emerald-300"
+            pulse={(summary?.liveMatches || 0) > 0}
+          />
+        </button>
+        <button type="button" onClick={() => setStatus(status === "Upcoming" ? "all" : "Upcoming")} className={`block w-full rounded-2xl text-left transition-all ${status === "Upcoming" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Calendar}
+            label="Upcoming matches"
+            value={summary ? summary.upcomingMatches : "—"}
+            tint="from-amber-500/30"
+            accent="text-amber-300"
+          />
+        </button>
         <StatTile
           icon={Medal}
           label="MVPs awarded"

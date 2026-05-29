@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Sparkles as SparklesIcon,
   AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import Sparkles from "../components/fx/Sparkles.jsx";
 import Aurora from "../components/fx/Aurora.jsx";
@@ -32,12 +33,14 @@ const ROLE_CARDS = [
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, completeTwoFactorLogin } = useAuth();
   const [selectedRole, setSelectedRole] = useState("admin");
   const [email, setEmail] = useState(ROLE_EMAILS.admin);
   const [password, setPassword] = useState(DEMO_PASSWORD);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const [challengeToken, setChallengeToken] = useState(null); // set when 2FA required
+  const [code, setCode] = useState("");
 
   const pickRole = (r) => {
     setSelectedRole(r);
@@ -50,10 +53,29 @@ export default function Login() {
     setBusy(true);
     setErr(null);
     try {
-      await login({ email, password });
-      navigate("/app");
+      const res = await login({ email, password });
+      if (res?.twoFactorRequired) {
+        setChallengeToken(res.challengeToken);
+        setCode("");
+      } else {
+        navigate("/app");
+      }
     } catch (e) {
       setErr(e?.response?.data?.error || e.message || "Login failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onVerifyCode = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await completeTwoFactorLogin(challengeToken, code);
+      navigate("/app");
+    } catch (e) {
+      setErr(e?.response?.data?.error || e.message || "Verification failed");
     } finally {
       setBusy(false);
     }
@@ -139,13 +161,50 @@ export default function Login() {
         </motion.div>
 
         <motion.form
-          onSubmit={onSubmit}
+          onSubmit={challengeToken ? onVerifyCode : onSubmit}
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.1 }}
           className="glass-card relative overflow-hidden p-8"
         >
           <Sparkles count={10} />
+          {challengeToken ? (
+            <div className="relative z-10">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-brand-500/15 px-3 py-1 text-xs text-brand-200 ring-1 ring-brand-400/30">
+                <ShieldCheck size={14} /> Two-factor authentication
+              </div>
+              <div className="font-display text-2xl font-bold">Enter your code</div>
+              <p className="mt-1 text-sm text-white/60">
+                Open your authenticator app and enter the 6-digit code for this account.
+              </p>
+              <div className="mt-6 space-y-4">
+                <input
+                  autoFocus
+                  inputMode="numeric"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="••••••"
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center font-mono text-2xl tracking-[0.5em] text-white outline-none focus:border-brand-400/60 focus:bg-white/10"
+                />
+                {err && (
+                  <div className="flex items-start gap-2 rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-300 ring-1 ring-rose-400/30">
+                    <AlertTriangle size={14} className="mt-0.5 flex-shrink-0" />
+                    <span>{err}</span>
+                  </div>
+                )}
+                <button type="submit" disabled={busy || code.length !== 6} className="btn-primary w-full disabled:opacity-60">
+                  {busy ? "Verifying…" : "Verify & continue"} {!busy && <ArrowRight size={18} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setChallengeToken(null); setCode(""); setErr(null); }}
+                  className="w-full text-center text-xs text-white/55 hover:text-white"
+                >
+                  ← Back to login
+                </button>
+              </div>
+            </div>
+          ) : (
           <div className="relative z-10">
             <div className="mb-1 text-xs uppercase tracking-[0.2em] text-white/50">
               Signing in as
@@ -178,9 +237,9 @@ export default function Login() {
                   <input type="checkbox" className="h-4 w-4 rounded border-white/20 bg-white/10" />
                   Remember me
                 </label>
-                <a href="#" className="text-brand-300 hover:text-white">
+                <Link to="/forgot-password" className="text-brand-300 hover:text-white">
                   Forgot password?
-                </a>
+                </Link>
               </div>
 
               <button type="submit" disabled={busy} className="btn-primary w-full disabled:opacity-60">
@@ -200,6 +259,7 @@ export default function Login() {
               </div>
             </div>
           </div>
+          )}
         </motion.form>
       </div>
     </div>

@@ -61,10 +61,16 @@ export default function Visitors() {
       {error && <ErrorState error={error} onRetry={refetch} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={UserCheck} label="Inside now" value={loading ? "—" : summary?.inside} tint="from-emerald-500/30" pulse={summary?.inside > 0} />
+        <button type="button" onClick={() => setTab("inside")} className={`block w-full rounded-2xl text-left transition-all ${tab === "inside" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={UserCheck} label="Inside now" value={loading ? "—" : summary?.inside} tint="from-emerald-500/30" pulse={summary?.inside > 0} />
+        </button>
         <StatTile icon={SparklesIcon} label="Today" value={loading ? "—" : summary?.todayCheckIns} tint="from-brand-500/30" />
-        <StatTile icon={IdCard} label="All time" value={loading ? "—" : summary?.total} tint="from-accent-violet/30" />
-        <StatTile icon={LogOut} label="Checked out" value={loading ? "—" : (summary?.total - summary?.inside) || 0} tint="from-white/15" />
+        <button type="button" onClick={() => setTab("all")} className={`block w-full rounded-2xl text-left transition-all ${tab === "all" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={IdCard} label="All time" value={loading ? "—" : summary?.total} tint="from-accent-violet/30" />
+        </button>
+        <button type="button" onClick={() => setTab("history")} className={`block w-full rounded-2xl text-left transition-all ${tab === "history" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={LogOut} label="Checked out" value={loading ? "—" : (summary?.total - summary?.inside) || 0} tint="from-white/15" />
+        </button>
       </div>
 
       <div className="card flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

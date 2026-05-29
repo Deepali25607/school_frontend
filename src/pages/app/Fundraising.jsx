@@ -106,12 +106,14 @@ export default function Fundraising() {
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile
-          icon={Target}
-          label="Active campaigns"
-          value={summary ? summary.activeCampaigns : "—"}
-          tint="from-brand-500/30"
-        />
+        <button type="button" onClick={() => setStatus(status === "Active" ? "all" : "Active")} className={`block w-full rounded-2xl text-left transition-all ${status === "Active" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Target}
+            label="Active campaigns"
+            value={summary ? summary.activeCampaigns : "—"}
+            tint="from-brand-500/30"
+          />
+        </button>
         <StatTile
           icon={IndianRupee}
           label="Total raised"

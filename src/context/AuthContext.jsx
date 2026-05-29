@@ -59,12 +59,27 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
-  const login = async ({ email, password }) => {
-    const res = await endpoints.login({ email, password });
+  const finalizeSession = (res) => {
     setToken(res.token);
     setUser(res.user);
     rtConnect(res.token);
     return res.user;
+  };
+
+  const login = async ({ email, password }) => {
+    const res = await endpoints.login({ email, password });
+    // Account has 2FA — caller must complete the challenge before a session
+    // is established.
+    if (res.twoFactorRequired) {
+      return { twoFactorRequired: true, challengeToken: res.challengeToken };
+    }
+    return finalizeSession(res);
+  };
+
+  // Complete a 2FA login by exchanging the challenge token + authenticator code.
+  const completeTwoFactorLogin = async (challengeToken, code) => {
+    const res = await endpoints.twoFactorLogin(challengeToken, code);
+    return finalizeSession(res);
   };
 
   const logout = () => {
@@ -86,7 +101,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, refreshUser }}>
+    <AuthContext.Provider value={{ user, login, completeTwoFactorLogin, logout, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

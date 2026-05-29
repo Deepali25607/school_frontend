@@ -27,6 +27,7 @@ export default function Attendance() {
   );
   const [rows, setRows] = useState([]);
   const [grade, setGrade] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
 
@@ -34,9 +35,16 @@ export default function Attendance() {
     if (data?.items) setRows(data.items);
   }, [data]);
 
+  // Grade-filtered set drives the per-status summary counts (so the cards keep
+  // showing the full breakdown). The table additionally narrows by the status
+  // filter the cards toggle.
   const filtered = useMemo(
     () => rows.filter((r) => grade === "all" || String(r.grade) === grade),
     [rows, grade]
+  );
+  const visible = useMemo(
+    () => filtered.filter((r) => statusFilter === "all" || r.status === statusFilter),
+    [filtered, statusFilter]
   );
 
   const summary = STATUS.map((s) => ({
@@ -76,42 +84,61 @@ export default function Attendance() {
       {error && <ErrorState error={error} onRetry={refetch} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {summary.map((s, i) => (
-          <motion.div
-            key={s.key}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="card flex items-center justify-between"
-          >
-            <div>
-              <div className="text-xs uppercase tracking-wider text-white/60">
-                {s.key}
-              </div>
-              <div className="stat-num">{loading ? "—" : s.count}</div>
-            </div>
-            <div
-              className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ring-1 ${s.color}`}
+        {summary.map((s, i) => {
+          const active = statusFilter === s.key;
+          return (
+            <motion.button
+              type="button"
+              key={s.key}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              onClick={() => setStatusFilter(active ? "all" : s.key)}
+              title={active ? "Show all statuses" : `Show only ${s.key}`}
+              className={`card flex items-center justify-between text-left transition-all hover:bg-white/[0.06] ${
+                active ? "ring-1 ring-brand-400/50" : ""
+              }`}
             >
-              <s.icon size={18} />
-            </div>
-          </motion.div>
-        ))}
+              <div>
+                <div className="text-xs uppercase tracking-wider text-white/60">
+                  {s.key}
+                </div>
+                <div className="stat-num">{loading ? "—" : s.count}</div>
+              </div>
+              <div
+                className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ring-1 ${s.color}`}
+              >
+                <s.icon size={18} />
+              </div>
+            </motion.button>
+          );
+        })}
       </div>
 
       <div className="card flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <select
-          value={grade}
-          onChange={(e) => setGrade(e.target.value)}
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none"
-        >
-          <option value="all">All grades</option>
-          {Array.from({ length: 12 }, (_, i) => i + 1).map((g) => (
-            <option key={g} value={g}>
-              Grade {g}
-            </option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={grade}
+            onChange={(e) => setGrade(e.target.value)}
+            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none"
+          >
+            <option value="all">All grades</option>
+            {Array.from({ length: 12 }, (_, i) => i + 1).map((g) => (
+              <option key={g} value={g}>
+                Grade {g}
+              </option>
+            ))}
+          </select>
+          {statusFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => setStatusFilter("all")}
+              className="inline-flex items-center gap-1 rounded-xl bg-brand-500/15 px-3 py-2 text-sm text-brand-200 ring-1 ring-brand-400/30 hover:bg-brand-500/25"
+            >
+              {statusFilter} <X size={13} />
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <AnimatePresence>
             {savedAt && (
@@ -155,7 +182,7 @@ export default function Attendance() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r, i) => (
+                {visible.map((r, i) => (
                   <motion.tr
                     key={r.id}
                     initial={{ opacity: 0, y: 6 }}

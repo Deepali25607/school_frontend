@@ -147,26 +147,30 @@ export default function Suggestions() {
           value={summary ? summary.totalVotes : "—"}
           tint="from-brand-500/30"
         />
-        <StatTile
-          icon={Hammer}
-          label="In progress"
-          value={summary ? summary.inProgress + summary.planned : "—"}
-          subValue={
-            summary
-              ? `${summary.planned} planned · ${summary.inProgress} active`
-              : null
-          }
-          tint="from-accent-violet/30"
-          accent="text-purple-300"
-        />
-        <StatTile
-          icon={CheckCircle2}
-          label="Implemented"
-          value={summary ? summary.implemented : "—"}
-          tint="from-emerald-500/30"
-          accent="text-emerald-300"
-          pulse={(summary?.implemented || 0) > 0}
-        />
+        <button type="button" onClick={() => setStatus(status === "In Progress" ? "all" : "In Progress")} className={`block w-full rounded-2xl text-left transition-all ${status === "In Progress" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={Hammer}
+            label="In progress"
+            value={summary ? summary.inProgress + summary.planned : "—"}
+            subValue={
+              summary
+                ? `${summary.planned} planned · ${summary.inProgress} active`
+                : null
+            }
+            tint="from-accent-violet/30"
+            accent="text-purple-300"
+          />
+        </button>
+        <button type="button" onClick={() => setStatus(status === "Implemented" ? "all" : "Implemented")} className={`block w-full rounded-2xl text-left transition-all ${status === "Implemented" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile
+            icon={CheckCircle2}
+            label="Implemented"
+            value={summary ? summary.implemented : "—"}
+            tint="from-emerald-500/30"
+            accent="text-emerald-300"
+            pulse={(summary?.implemented || 0) > 0}
+          />
+        </button>
       </div>
 
       {/* Status pipeline + Top idea callout */}

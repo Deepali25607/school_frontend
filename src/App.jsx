@@ -7,6 +7,8 @@ import LogoOrb3D from "./components/fx/LogoOrb3D.jsx";
 // Top-level pages — lazy so heavy 3D / charts / animations only load on demand
 const Landing = lazy(() => import("./pages/Landing.jsx"));
 const Login = lazy(() => import("./pages/Login.jsx"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword.jsx"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword.jsx"));
 const AppLayout = lazy(() => import("./layouts/AppLayout.jsx"));
 
 // Module pages — each ships as its own chunk
@@ -25,10 +27,13 @@ const Library = lazy(() => import("./pages/app/Library.jsx"));
 const Transport = lazy(() => import("./pages/app/Transport.jsx"));
 const Hostel = lazy(() => import("./pages/app/Hostel.jsx"));
 const Payroll = lazy(() => import("./pages/app/Payroll.jsx"));
+const SalaryAdvances = lazy(() => import("./pages/app/SalaryAdvances.jsx"));
 const Learning = lazy(() => import("./pages/app/Learning.jsx"));
+const Quizzes = lazy(() => import("./pages/app/Quizzes.jsx"));
 const Communications = lazy(() => import("./pages/app/Communications.jsx"));
 const Events = lazy(() => import("./pages/app/Events.jsx"));
 const Inventory = lazy(() => import("./pages/app/Inventory.jsx"));
+const Expenses = lazy(() => import("./pages/app/Expenses.jsx"));
 const Leave = lazy(() => import("./pages/app/Leave.jsx"));
 const Settings = lazy(() => import("./pages/app/Settings.jsx"));
 const Maintenance = lazy(() => import("./pages/app/Maintenance.jsx"));
@@ -38,8 +43,11 @@ const Reports = lazy(() => import("./pages/app/Reports.jsx"));
 const Documents = lazy(() => import("./pages/app/Documents.jsx"));
 const CertificatePrint = lazy(() => import("./pages/app/CertificatePrint.jsx"));
 const ReceiptPrint = lazy(() => import("./pages/app/ReceiptPrint.jsx"));
+const ReportCardPrint = lazy(() => import("./pages/app/ReportCardPrint.jsx"));
+const HallTicketPrint = lazy(() => import("./pages/app/HallTicketPrint.jsx"));
 const Health = lazy(() => import("./pages/app/Health.jsx"));
 const Discipline = lazy(() => import("./pages/app/Discipline.jsx"));
+const SafeReports = lazy(() => import("./pages/app/SafeReports.jsx"));
 const Achievements = lazy(() => import("./pages/app/Achievements.jsx"));
 const Cafeteria = lazy(() => import("./pages/app/Cafeteria.jsx"));
 const Calendar = lazy(() => import("./pages/app/Calendar.jsx"));
@@ -57,6 +65,8 @@ const Promotion = lazy(() => import("./pages/app/Promotion.jsx"));
 const Substitutes = lazy(() => import("./pages/app/Substitutes.jsx"));
 const Staff = lazy(() => import("./pages/app/Staff.jsx"));
 const Access = lazy(() => import("./pages/app/Access.jsx"));
+const Assignments = lazy(() => import("./pages/app/Assignments.jsx"));
+const Messages = lazy(() => import("./pages/app/Messages.jsx"));
 
 function Splash({ label = "Loading…" }) {
   return (
@@ -98,6 +108,9 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route
           path="/app"
           element={
@@ -129,10 +142,13 @@ export default function App() {
           <Route path="transport" element={<Suspense fallback={<RouteFallback />}><Transport /></Suspense>} />
           <Route path="hostel" element={<Suspense fallback={<RouteFallback />}><Hostel /></Suspense>} />
           <Route path="payroll" element={<Suspense fallback={<RouteFallback />}><Payroll /></Suspense>} />
+          <Route path="salary-advances" element={<Suspense fallback={<RouteFallback />}><SalaryAdvances /></Suspense>} />
           <Route path="learning" element={<Suspense fallback={<RouteFallback />}><Learning /></Suspense>} />
+          <Route path="quizzes" element={<Suspense fallback={<RouteFallback />}><Quizzes /></Suspense>} />
           <Route path="communications" element={<Suspense fallback={<RouteFallback />}><Communications /></Suspense>} />
           <Route path="events" element={<Suspense fallback={<RouteFallback />}><Events /></Suspense>} />
           <Route path="inventory" element={<Suspense fallback={<RouteFallback />}><Inventory /></Suspense>} />
+          <Route path="expenses" element={<Suspense fallback={<RouteFallback />}><Expenses /></Suspense>} />
           <Route path="leave" element={<Suspense fallback={<RouteFallback />}><Leave /></Suspense>} />
           <Route path="settings" element={<Suspense fallback={<RouteFallback />}><Settings /></Suspense>} />
           <Route path="maintenance" element={<Suspense fallback={<RouteFallback />}><Maintenance /></Suspense>} />
@@ -142,6 +158,7 @@ export default function App() {
           <Route path="documents" element={<Suspense fallback={<RouteFallback />}><Documents /></Suspense>} />
           <Route path="health" element={<Suspense fallback={<RouteFallback />}><Health /></Suspense>} />
           <Route path="discipline" element={<Suspense fallback={<RouteFallback />}><Discipline /></Suspense>} />
+          <Route path="safe-space" element={<Suspense fallback={<RouteFallback />}><SafeReports /></Suspense>} />
           <Route path="achievements" element={<Suspense fallback={<RouteFallback />}><Achievements /></Suspense>} />
           <Route path="cafeteria" element={<Suspense fallback={<RouteFallback />}><Cafeteria /></Suspense>} />
           <Route path="calendar" element={<Suspense fallback={<RouteFallback />}><Calendar /></Suspense>} />
@@ -159,6 +176,8 @@ export default function App() {
           <Route path="substitutes" element={<Suspense fallback={<RouteFallback />}><Substitutes /></Suspense>} />
           <Route path="staff" element={<Suspense fallback={<RouteFallback />}><Staff /></Suspense>} />
           <Route path="access" element={<Suspense fallback={<RouteFallback />}><Access /></Suspense>} />
+          <Route path="assignments" element={<Suspense fallback={<RouteFallback />}><Assignments /></Suspense>} />
+          <Route path="messages" element={<Suspense fallback={<RouteFallback />}><Messages /></Suspense>} />
         </Route>
         {/* Standalone print views — authenticated but render outside the app shell so
             the sidebar/topbar don't appear in the printed output. */}
@@ -178,6 +197,26 @@ export default function App() {
             <RequireAuth>
               <Suspense fallback={<Splash label="Loading receipt…" />}>
                 <ReceiptPrint />
+              </Suspense>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/print/report-card/:id"
+          element={
+            <RequireAuth>
+              <Suspense fallback={<Splash label="Loading report card…" />}>
+                <ReportCardPrint />
+              </Suspense>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/print/hall-ticket/:examId/:studentId"
+          element={
+            <RequireAuth>
+              <Suspense fallback={<Splash label="Loading hall ticket…" />}>
+                <HallTicketPrint />
               </Suspense>
             </RequireAuth>
           }

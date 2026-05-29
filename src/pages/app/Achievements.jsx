@@ -111,9 +111,15 @@ export default function Achievements() {
       {/* Stat tiles */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <StatTile icon={Trophy} label="Total wins" value={loading ? "—" : summary?.total} tint="from-accent-gold/30" />
-        <StatTile icon={Crown} label="Gold (1st)" value={loading ? "—" : summary?.gold} tint="from-amber-500/30" accent="text-amber-300" />
-        <StatTile icon={Globe} label="National+" value={loading ? "—" : summary?.national} tint="from-accent-pink/30" accent="text-pink-300" pulse={summary?.national > 0} />
-        <StatTile icon={Calendar} label="This year" value={loading ? "—" : summary?.thisYear} tint="from-brand-500/30" />
+        <button type="button" onClick={() => setPosition(position === "1st" ? "all" : "1st")} className={`block w-full rounded-2xl text-left transition-all ${position === "1st" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={Crown} label="Gold (1st)" value={loading ? "—" : summary?.gold} tint="from-amber-500/30" accent="text-amber-300" />
+        </button>
+        <button type="button" onClick={() => setLevel(level === "National" ? "all" : "National")} className={`block w-full rounded-2xl text-left transition-all ${level === "National" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={Globe} label="National+" value={loading ? "—" : summary?.national} tint="from-accent-pink/30" accent="text-pink-300" pulse={summary?.national > 0} />
+        </button>
+        <button type="button" onClick={() => setSinceDays(sinceDays === "365" ? "" : "365")} className={`block w-full rounded-2xl text-left transition-all ${sinceDays === "365" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={Calendar} label="This year" value={loading ? "—" : summary?.thisYear} tint="from-brand-500/30" />
+        </button>
       </div>
 
       {/* Podium — top 3 students by points */}

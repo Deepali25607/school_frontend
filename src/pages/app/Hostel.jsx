@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
 import { PageHeader } from "./Students.jsx";
 
@@ -193,6 +194,8 @@ export default function Hostel() {
         </div>
       )}
 
+      <WardensAndMess />
+
       <AnimatePresence>
         {selected && (
           <RoomModal
@@ -205,6 +208,130 @@ export default function Hostel() {
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function WardensAndMess() {
+  const wardens = useApi(endpoints.hostelWardens, []);
+  const mess = useApi(endpoints.hostelMess, []);
+  const { user } = useAuth();
+  const canManage = ["admin", "principal"].includes(user?.role);
+  const [editing, setEditing] = useState(null); // { day, meal, dish }
+  const [savingCell, setSavingCell] = useState(null);
+
+  const meals = mess.data?.meals || [];
+  const menu = mess.data?.menu || [];
+
+  const saveCell = async (day, meal, dish) => {
+    setSavingCell(`${day}-${meal}`);
+    try {
+      await endpoints.hostelMessSet(day, meal, dish);
+      mess.refetch();
+    } catch (e) {
+      alert(e.response?.data?.error || e.message);
+    } finally {
+      setSavingCell(null);
+      setEditing(null);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr]">
+      <div className="card">
+        <div className="mb-3 flex items-center gap-2">
+          <Building2 size={16} className="text-brand-300" />
+          <div className="font-display font-semibold">Wardens</div>
+        </div>
+        {wardens.loading ? (
+          <Skeleton className="h-40" />
+        ) : (
+          <div className="space-y-2">
+            {(wardens.data?.items || []).map((w) => (
+              <div key={w.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-medium">{w.name}</div>
+                  <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 ${w.onDuty ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30" : "bg-white/10 text-white/55 ring-white/20"}`}>
+                    {w.onDuty ? "On duty" : "Off"}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-[11px] text-white/50">
+                  {w.blockName || "Unassigned"} · {w.shift} shift · {w.gender}
+                </div>
+                <div className="mt-0.5 text-[11px] text-white/45">{w.phone} · {w.email}</div>
+                {canManage && (
+                  <button
+                    onClick={() => endpoints.hostelWardenUpdate(w.id, { onDuty: !w.onDuty }).then(() => wardens.refetch())}
+                    className="mt-2 rounded-md bg-white/5 px-2 py-1 text-[11px] text-white/70 ring-1 ring-white/10 hover:bg-white/10"
+                  >
+                    Toggle duty
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="font-display font-semibold">Mess weekly menu</div>
+          {mess.data?.summary && (
+            <div className="text-xs text-white/55">
+              {mess.data.summary.residents} residents · ~{mess.data.summary.estDailyPlates} plates/day
+            </div>
+          )}
+        </div>
+        {mess.loading ? (
+          <Skeleton className="h-56" />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-[11px] uppercase tracking-wider text-white/50">
+                <tr>
+                  <th className="px-2 py-2">Day</th>
+                  {meals.map((m) => <th key={m} className="px-2 py-2">{m}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {menu.map((row) => (
+                  <tr key={row.day} className="border-t border-white/5">
+                    <td className="px-2 py-2 font-medium">{row.day}</td>
+                    {meals.map((m) => {
+                      const key = `${row.day}-${m}`;
+                      const isEditing = editing?.day === row.day && editing?.meal === m;
+                      return (
+                        <td key={m} className="px-2 py-1.5">
+                          {isEditing ? (
+                            <input
+                              autoFocus
+                              defaultValue={row.meals[m]}
+                              onBlur={(e) => saveCell(row.day, m, e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") setEditing(null); }}
+                              className="w-full rounded-md border border-brand-400/50 bg-white/10 px-2 py-1 text-xs outline-none"
+                            />
+                          ) : (
+                            <button
+                              disabled={!canManage}
+                              onClick={() => canManage && setEditing({ day: row.day, meal: m })}
+                              className={`w-full rounded-md px-2 py-1 text-left text-xs ${canManage ? "hover:bg-white/5" : ""} ${savingCell === key ? "opacity-50" : ""}`}
+                            >
+                              {row.meals[m]}
+                            </button>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {canManage && (
+              <div className="mt-2 text-[11px] text-white/40">Click any dish to edit · Enter to save · Esc to cancel</div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

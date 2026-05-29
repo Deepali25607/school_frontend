@@ -45,6 +45,7 @@ export default function Maintenance() {
   const { data, loading, error, refetch } = useApi(endpoints.maintenance, []);
   const [selected, setSelected] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [focus, setFocus] = useState("all"); // board filter driven by the KPI cards
   useRealtime("maintenance.changed", () => refetch());
 
   const stages = data?.stages || [];
@@ -52,11 +53,17 @@ export default function Maintenance() {
   const summary = data?.summary;
 
   const board = useMemo(() => {
+    const matches = (t) => {
+      if (focus === "active") return t.stage === "Open" || t.stage === "Assigned";
+      if (focus === "critical") return t.priority === "Critical" && t.stage !== "Resolved" && t.stage !== "Closed";
+      if (focus === "resolved") return t.stage === "Resolved" || t.stage === "Closed";
+      return true;
+    };
     const m = {};
     stages.forEach((s) => (m[s] = []));
-    tickets.forEach((t) => m[t.stage]?.push(t));
+    tickets.filter(matches).forEach((t) => m[t.stage]?.push(t));
     return m;
-  }, [tickets, stages]);
+  }, [tickets, stages, focus]);
 
   const refresh = (updated) => {
     setSelected((s) => (s && updated && s.id === updated.id ? updated : s));
@@ -74,15 +81,33 @@ export default function Maintenance() {
       {error && <ErrorState error={error} onRetry={refetch} />}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={Wrench} label="Total tickets" value={loading ? "—" : summary?.total} tint="from-brand-500/30" />
-        <StatTile icon={Zap} label="Open + Assigned" value={loading ? "—" : (summary?.Open || 0) + (summary?.Assigned || 0)} tint="from-amber-500/30" />
-        <StatTile icon={AlertOctagon} label="Critical (active)" value={loading ? "—" : summary?.critical} tint="from-rose-500/30" pulse={summary?.critical > 0} />
-        <StatTile icon={CheckCircle2} label="Resolved" value={loading ? "—" : (summary?.Resolved || 0) + (summary?.Closed || 0)} tint="from-emerald-500/30" />
+        <button type="button" onClick={() => setFocus("all")} className={`block w-full rounded-2xl text-left transition-all ${focus === "all" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={Wrench} label="Total tickets" value={loading ? "—" : summary?.total} tint="from-brand-500/30" />
+        </button>
+        <button type="button" onClick={() => setFocus(focus === "active" ? "all" : "active")} className={`block w-full rounded-2xl text-left transition-all ${focus === "active" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={Zap} label="Open + Assigned" value={loading ? "—" : (summary?.Open || 0) + (summary?.Assigned || 0)} tint="from-amber-500/30" />
+        </button>
+        <button type="button" onClick={() => setFocus(focus === "critical" ? "all" : "critical")} className={`block w-full rounded-2xl text-left transition-all ${focus === "critical" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={AlertOctagon} label="Critical (active)" value={loading ? "—" : summary?.critical} tint="from-rose-500/30" pulse={summary?.critical > 0} />
+        </button>
+        <button type="button" onClick={() => setFocus(focus === "resolved" ? "all" : "resolved")} className={`block w-full rounded-2xl text-left transition-all ${focus === "resolved" ? "ring-1 ring-brand-400/50" : ""}`}>
+          <StatTile icon={CheckCircle2} label="Resolved" value={loading ? "—" : (summary?.Resolved || 0) + (summary?.Closed || 0)} tint="from-emerald-500/30" />
+        </button>
       </div>
 
       <div className="card flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="text-xs text-white/55">
-          Click any ticket to assign a technician or advance its stage
+        <div className="flex items-center gap-2 text-xs text-white/55">
+          {focus === "all" ? (
+            "Click a stat card to focus the board, or any ticket to assign / advance it"
+          ) : (
+            <button
+              type="button"
+              onClick={() => setFocus("all")}
+              className="inline-flex items-center gap-1 rounded-lg bg-brand-500/15 px-3 py-1.5 text-brand-200 ring-1 ring-brand-400/30 hover:bg-brand-500/25"
+            >
+              Focus: {focus === "active" ? "Open + Assigned" : focus === "critical" ? "Critical" : "Resolved"} <X size={13} />
+            </button>
+          )}
         </div>
         <button onClick={() => setCreating(true)} className="btn-primary px-3 py-2 text-sm">
           <Plus size={14} /> Raise ticket
