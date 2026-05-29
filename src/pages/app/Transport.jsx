@@ -39,6 +39,7 @@ export default function Transport() {
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [error, setError] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     const t = setInterval(() => refetch(), 5000);
@@ -57,8 +58,19 @@ export default function Transport() {
       buses: routes.length,
       students: routes.reduce((a, r) => a + r.totalStudents, 0),
       onSchedule: routes.filter((r) => r.status === "On schedule").length,
+      delayed: routes.filter((r) => r.status !== "On schedule").length,
     };
   }, [routes]);
+
+  const visibleRoutes = useMemo(() => {
+    if (statusFilter === "all") return routes;
+    if (statusFilter === "Delayed")
+      return routes.filter((r) => r.status !== "On schedule");
+    return routes.filter((r) => r.status === statusFilter);
+  }, [routes, statusFilter]);
+
+  const toggleStatus = (value) =>
+    setStatusFilter((cur) => (cur === value ? "all" : value));
 
   return (
     <div className="space-y-5">
@@ -81,20 +93,67 @@ export default function Transport() {
       )}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatTile icon={Bus} label="Buses" value={loading ? "—" : totals.buses} tint="from-brand-500/30" />
-        <StatTile icon={MapPin} label="Routes" value={loading ? "—" : totals.routes} tint="from-accent-violet/30" />
+        <StatTile
+          icon={Bus}
+          label="Buses"
+          value={loading ? "—" : totals.buses}
+          tint="from-brand-500/30"
+          onClick={() => setStatusFilter("all")}
+          active={statusFilter === "all"}
+        />
+        <StatTile
+          icon={MapPin}
+          label="Routes"
+          value={loading ? "—" : totals.routes}
+          tint="from-accent-violet/30"
+          onClick={() => setStatusFilter("all")}
+          active={statusFilter === "all"}
+        />
         <StatTile icon={Users} label="Students" value={loading ? "—" : totals.students} tint="from-accent-pink/30" />
-        <StatTile icon={Gauge} label="On schedule" value={loading ? "—" : `${totals.onSchedule}/${totals.routes}`} tint="from-emerald-500/30" />
+        <StatTile
+          icon={Gauge}
+          label="On schedule"
+          value={loading ? "—" : `${totals.onSchedule}/${totals.routes}`}
+          tint="from-emerald-500/30"
+          onClick={() => toggleStatus("On schedule")}
+          active={statusFilter === "On schedule"}
+        />
       </div>
 
-      {canEdit && (
-        <div className="flex justify-end">
-          <button
-            onClick={() => setEditing("new")}
-            className="btn-primary px-3 py-2 text-sm"
-          >
-            <Plus size={14} /> New route
-          </button>
+      {(canEdit || statusFilter !== "all" || totals.delayed > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {totals.delayed > 0 && (
+              <button
+                type="button"
+                onClick={() => toggleStatus("Delayed")}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 transition ${
+                  statusFilter === "Delayed"
+                    ? "bg-rose-500/20 text-rose-200 ring-rose-400/40"
+                    : "bg-white/5 text-white/70 ring-white/10 hover:bg-white/10"
+                }`}
+              >
+                <CircleAlert size={12} /> Delayed ({totals.delayed})
+              </button>
+            )}
+            {statusFilter !== "all" && (
+              <button
+                type="button"
+                onClick={() => setStatusFilter("all")}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-white/70 ring-1 ring-white/10 hover:bg-white/10"
+              >
+                Filter: {statusFilter} <X size={12} />
+              </button>
+            )}
+          </div>
+          {canEdit && (
+            <button
+              onClick={() => setEditing("new")}
+              className="btn-primary px-3 py-2 text-sm"
+            >
+              <Plus size={14} /> New route
+            </button>
+          )}
         </div>
       )}
 
@@ -106,7 +165,7 @@ export default function Transport() {
               <Skeleton key={i} className="h-24" />
             ))
           ) : (
-            routes.map((r) => (
+            visibleRoutes.map((r) => (
               <motion.div
                 key={r.id}
                 whileHover={{ x: 2 }}
@@ -198,6 +257,17 @@ export default function Transport() {
               )}
             </div>
           )}
+          {!loading && routes.length > 0 && visibleRoutes.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-white/55">
+              No {statusFilter === "Delayed" ? "delayed" : statusFilter.toLowerCase()} routes.{" "}
+              <button
+                onClick={() => setStatusFilter("all")}
+                className="text-brand-300 underline-offset-2 hover:underline"
+              >
+                Show all
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Map + details */}
@@ -251,9 +321,9 @@ export default function Transport() {
   );
 }
 
-function StatTile({ icon: Icon, label, value, tint }) {
-  return (
-    <div className="card relative overflow-hidden">
+function StatTile({ icon: Icon, label, value, tint, onClick, active }) {
+  const inner = (
+    <div className="card relative h-full overflow-hidden">
       <div
         className={`pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${tint} to-transparent blur-2xl`}
       />
@@ -269,6 +339,20 @@ function StatTile({ icon: Icon, label, value, tint }) {
         </div>
       </div>
     </div>
+  );
+
+  if (!onClick) return inner;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`block w-full rounded-2xl text-left transition-all ${
+        active ? "ring-1 ring-brand-400/60 shadow-glow" : "hover:ring-1 hover:ring-white/15"
+      }`}
+    >
+      {inner}
+    </button>
   );
 }
 
