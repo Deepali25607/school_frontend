@@ -1,0 +1,16 @@
+{
+  "appId": "com.lumina.schoolmanagement",
+  "appName": "Lumina",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "http"
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

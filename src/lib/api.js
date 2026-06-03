@@ -42,8 +42,16 @@ api.interceptors.response.use(
 
 export const endpoints = {
   // auth
-  login: (payload) =>
-    api.post("/api/auth/login", payload).then((r) => r.data),
+  // The backend's login field has evolved from `email` to `identifier`
+  // (email/phone). Send both so the client works against either backend
+  // version — the unused key is ignored.
+  login: (payload) => {
+    const body =
+      payload?.email && payload.identifier == null
+        ? { ...payload, identifier: payload.email }
+        : payload;
+    return api.post("/api/auth/login", body).then((r) => r.data);
+  },
   me: () => api.get("/api/auth/me").then((r) => r.data),
   updateProfile: (payload) =>
     api.patch("/api/auth/me", payload).then((r) => r.data),
