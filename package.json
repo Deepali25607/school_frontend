@@ -8,8 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "cap:sync": "vite build && cap sync android",
-    "cap:sync:local": "vite build --mode localdev && cap sync android",
+    "cap:sync": "vite build && npm run strip:distributables && cap sync android",
+    "cap:sync:local": "vite build --mode localdev && npm run strip:distributables && cap sync android",
+    "strip:distributables": "node -e \"const f=require('fs');['dist/Lumina.apk','dist/download.html'].forEach(p=>f.rmSync(p,{force:true}))\"",
     "android:open": "cap open android",
     "android:run": "cap run android"
   },
