@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -17,15 +17,22 @@ import {
   CircleCheckBig,
   BookOpen,
   Users,
+  ImagePlus,
+  Download,
+  ImageIcon,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useRealtime } from "../../lib/useRealtime.js";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
+import { resizeImageToDataURL, downloadDataUrl } from "../../lib/image.js";
 import { PageHeader } from "./Students.jsx";
 
 const SECTIONS = ["A", "B", "C", "D"];
+const MAX_IMAGES = 6;
 const STATUS_TONES = {
   Submitted: "bg-brand-500/15 text-brand-200 ring-brand-400/30",
   Graded:    "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
@@ -287,6 +294,11 @@ function AssignmentCard({ a, role, onOpen, onEdit }) {
               {a.maxMarks} marks
             </span>
           ) : null}
+          {a.imageCount > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-white/55 ring-1 ring-white/10">
+              <ImageIcon size={10} /> {a.imageCount} photo{a.imageCount === 1 ? "" : "s"}
+            </span>
+          )}
           {myStatus && (
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ring-1 ${STATUS_TONES[myStatus] || STATUS_TONES["Not yet"]}`}
@@ -362,7 +374,33 @@ function AssignmentFormModal({ mode, initial, user, onClose, onSaved, onError })
       : new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 16)
   );
   const [maxMarks, setMaxMarks] = useState(initial?.maxMarks ?? 100);
+  const [images, setImages] = useState(initial?.images || []);
+  // On create, images are ready immediately. On edit the list item carries only
+  // an imageCount (not the heavy base64), so we fetch the full record before the
+  // payload is allowed to include `images` — otherwise saving would wipe them.
+  const [imagesReady, setImagesReady] = useState(!isEdit);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!isEdit || !initial?.id) return;
+    let cancelled = false;
+    endpoints
+      .assignment(initial.id)
+      .then((res) => {
+        if (!cancelled) {
+          setImages(res?.assignment?.images || []);
+          setImagesReady(true);
+        }
+      })
+      .catch(() => {
+        // Couldn't load existing photos — keep them untouched by not sending
+        // the images field on save (imagesReady stays false).
+        if (!cancelled) setImagesReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, initial?.id]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -378,6 +416,9 @@ function AssignmentFormModal({ mode, initial, user, onClose, onSaved, onError })
         dueAt: new Date(dueAt).toISOString(),
         maxMarks: maxMarks === "" ? null : Number(maxMarks),
       };
+      // Only include images when we have the authoritative set (always on create;
+      // on edit, once the existing photos have loaded).
+      if (imagesReady) payload.images = images;
       if (isEdit) {
         await endpoints.assignmentUpdate(initial.id, payload);
       } else {
@@ -487,6 +528,21 @@ function AssignmentFormModal({ mode, initial, user, onClose, onSaved, onError })
           />
         </Field>
 
+        <Field label="Question photos">
+          {isEdit && !imagesReady ? (
+            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-3 text-xs text-white/55">
+              <Loader size={14} className="animate-spin" /> Loading existing photos…
+            </div>
+          ) : (
+            <ImagesEditor
+              images={images}
+              onChange={setImages}
+              onError={onError}
+              hint="Photos of the question paper / worksheet. Students and parents can view and download these."
+            />
+          )}
+        </Field>
+
         <div className="flex items-center justify-end gap-2 border-t border-white/5 pt-3">
           <button
             type="button"
@@ -517,11 +573,15 @@ function AssignmentDetailModal({ id, user, onClose, onChanged, onError }) {
     [id]
   );
   const [submitText, setSubmitText] = useState("");
+  const [submitImages, setSubmitImages] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (data?.mySubmission?.text) setSubmitText(data.mySubmission.text);
+    if (data?.mySubmission) {
+      setSubmitText(data.mySubmission.text || "");
+      setSubmitImages(data.mySubmission.images || []);
+    }
   }, [data]);
 
   const role = user?.role;
@@ -540,13 +600,16 @@ function AssignmentDetailModal({ id, user, onClose, onChanged, onError }) {
 
   const onSubmit = async () => {
     if (submitting) return;
-    if (!submitText.trim()) {
-      onError("Please write something before submitting");
+    if (!submitText.trim() && submitImages.length === 0) {
+      onError("Write an answer or attach a photo before submitting");
       return;
     }
     setSubmitting(true);
     try {
-      await endpoints.assignmentSubmit(id, { text: submitText.trim() });
+      await endpoints.assignmentSubmit(id, {
+        text: submitText.trim(),
+        images: submitImages,
+      });
       await refetch();
       onChanged();
     } catch (err) {
@@ -607,6 +670,15 @@ function AssignmentDetailModal({ id, user, onClose, onChanged, onError }) {
             )}
           </div>
 
+          {/* Question photos — visible to everyone who can see the assignment */}
+          {Array.isArray(a.images) && a.images.length > 0 && (
+            <ImageGallery
+              images={a.images}
+              title={`${a.title} - question`}
+              label="Question paper"
+            />
+          )}
+
           {/* Student submit panel */}
           {role === "student" && (
             <div className="rounded-xl border border-brand-400/30 bg-brand-500/[0.06] p-3">
@@ -634,6 +706,31 @@ function AssignmentDetailModal({ id, user, onClose, onChanged, onError }) {
                 placeholder="Write your answer / notes here…"
                 className="mt-2 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-brand-400/50 disabled:opacity-60"
               />
+              {/* Answer sheet photos — editable until graded, read-only after */}
+              <div className="mt-2">
+                <div className="mb-1 text-xs uppercase tracking-wider text-brand-100/80">
+                  Answer sheet photos
+                </div>
+                {data.mySubmission?.status === "Graded" ? (
+                  submitImages.length > 0 ? (
+                    <ImageGallery
+                      images={submitImages}
+                      title={`${a.title} - my answer`}
+                      label="Your answer sheet"
+                      compact
+                    />
+                  ) : (
+                    <div className="text-[11px] text-white/45">No photos attached.</div>
+                  )
+                ) : (
+                  <ImagesEditor
+                    images={submitImages}
+                    onChange={setSubmitImages}
+                    onError={onError}
+                    hint="Photos of your solved answer sheet."
+                  />
+                )}
+              </div>
               {data.mySubmission?.feedback && (
                 <div className="mt-2 rounded-lg border border-emerald-400/30 bg-emerald-500/[0.06] p-2 text-xs text-emerald-100">
                   <div className="font-semibold">Teacher feedback</div>
@@ -758,9 +855,21 @@ function ChildrenProgressPanel({ childSubmissions, assignment }) {
               </div>
               {sub ? (
                 <>
-                  <p className="mt-1.5 whitespace-pre-wrap text-xs text-white/75">
-                    {sub.text}
-                  </p>
+                  {sub.text && (
+                    <p className="mt-1.5 whitespace-pre-wrap text-xs text-white/75">
+                      {sub.text}
+                    </p>
+                  )}
+                  {Array.isArray(sub.images) && sub.images.length > 0 && (
+                    <div className="mt-2">
+                      <ImageGallery
+                        images={sub.images}
+                        title={`${assignment.title} - ${c.studentName} answer`}
+                        label="Answer sheet"
+                        compact
+                      />
+                    </div>
+                  )}
                   {sub.feedback && (
                     <div className="mt-1.5 rounded-md border border-emerald-400/25 bg-emerald-500/[0.06] p-2 text-[11px] text-emerald-100">
                       <span className="font-semibold">Teacher feedback: </span>
@@ -871,9 +980,21 @@ function SubmissionsPanel({ submissions, summary, assignment, canGrade, onChange
                   </button>
                 )}
               </div>
-              <p className="mt-1.5 whitespace-pre-wrap text-xs text-white/75">
-                {s.text}
-              </p>
+              {s.text && (
+                <p className="mt-1.5 whitespace-pre-wrap text-xs text-white/75">
+                  {s.text}
+                </p>
+              )}
+              {Array.isArray(s.images) && s.images.length > 0 && (
+                <div className="mt-2">
+                  <ImageGallery
+                    images={s.images}
+                    title={`${assignment.title} - ${s.studentName} answer`}
+                    label="Answer sheet"
+                    compact
+                  />
+                </div>
+              )}
               {s.feedback && editing !== s.id && (
                 <div className="mt-1.5 rounded-md border border-emerald-400/25 bg-emerald-500/[0.06] p-2 text-[11px] text-emerald-100">
                   <span className="font-semibold">Feedback: </span>
@@ -979,5 +1100,236 @@ function Field({ label, children, className = "" }) {
       </span>
       {children}
     </label>
+  );
+}
+
+// ============ Photos ============
+
+// Editable photo picker used in the create/edit form. Resizes each picked file
+// to a base64 data URL and reports the full list up via onChange.
+function ImagesEditor({
+  images,
+  onChange,
+  onError,
+  hint = "JPG/PNG · auto-resized.",
+}) {
+  const fileRef = useRef(null);
+  const [busy, setBusy] = useState(false);
+
+  const onPick = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (fileRef.current) fileRef.current.value = "";
+    if (!files.length) return;
+    const room = MAX_IMAGES - images.length;
+    if (room <= 0) {
+      onError?.(`You can attach up to ${MAX_IMAGES} photos`);
+      return;
+    }
+    const picked = files.slice(0, room);
+    setBusy(true);
+    try {
+      const resized = [];
+      for (const f of picked) resized.push(await resizeImageToDataURL(f));
+      onChange([...images, ...resized]);
+      if (files.length > room)
+        onError?.(`Added ${room} — limit is ${MAX_IMAGES} photos`);
+    } catch (ex) {
+      onError?.(ex.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {images.map((src, i) => (
+          <div
+            key={i}
+            className="group relative h-20 w-20 overflow-hidden rounded-lg ring-1 ring-white/15"
+          >
+            <img src={src} alt={`Attachment ${i + 1}`} className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={() => onChange(images.filter((_, idx) => idx !== i))}
+              title="Remove"
+              className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white opacity-0 transition hover:bg-black/80 group-hover:opacity-100"
+            >
+              <X size={11} />
+            </button>
+          </div>
+        ))}
+        {images.length < MAX_IMAGES && (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            className="grid h-20 w-20 place-items-center rounded-lg border border-dashed border-white/20 bg-white/5 text-white/55 transition hover:bg-white/10 disabled:opacity-50"
+            title="Add photos"
+          >
+            {busy ? <Loader size={16} className="animate-spin" /> : <ImagePlus size={18} />}
+          </button>
+        )}
+      </div>
+      <div className="mt-1.5 text-[11px] text-white/45">
+        Up to {MAX_IMAGES} photos · {hint}
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={onPick}
+        className="hidden"
+      />
+    </div>
+  );
+}
+
+function safeImageName(title, i) {
+  const base = String(title || "assignment")
+    .replace(/[^\w.-]+/g, "_")
+    .slice(0, 40)
+    .replace(/^_+|_+$/g, "");
+  return `${base || "assignment"}-photo-${i + 1}.jpg`;
+}
+
+// Read-only gallery — thumbnails open a lightbox and every photo can be
+// downloaded. `label` distinguishes question papers from answer sheets;
+// `compact` renders it inline (no card chrome) for nesting inside list rows.
+function ImageGallery({ images, title, label = "Photos", compact = false }) {
+  const [open, setOpen] = useState(null); // index | null
+  if (!images?.length) return null;
+
+  return (
+    <div className={compact ? "" : "rounded-xl border border-white/10 bg-white/[0.03] p-3"}>
+      <div className="flex items-center gap-2 text-xs font-medium text-white/85">
+        <ImageIcon size={13} className="text-brand-200" />
+        {label}
+        <span className="text-[11px] font-normal text-white/45">({images.length})</span>
+      </div>
+      <div
+        className={`mt-2 grid gap-2 ${
+          compact ? "grid-cols-4 sm:grid-cols-6" : "grid-cols-3 sm:grid-cols-4"
+        }`}
+      >
+        {images.map((src, i) => (
+          <div
+            key={i}
+            className="group relative aspect-square overflow-hidden rounded-lg ring-1 ring-white/10"
+          >
+            <button type="button" onClick={() => setOpen(i)} className="h-full w-full" title="View">
+              <img
+                src={src}
+                alt={`Photo ${i + 1}`}
+                className="h-full w-full object-cover transition group-hover:scale-105"
+              />
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadDataUrl(src, safeImageName(title, i))}
+              title="Download"
+              className="absolute bottom-1 right-1 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white opacity-0 transition hover:bg-black/80 group-hover:opacity-100"
+            >
+              <Download size={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <AnimatePresence>
+        {open !== null && (
+          <Lightbox
+            images={images}
+            index={open}
+            title={title}
+            onClose={() => setOpen(null)}
+            onIndex={setOpen}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function Lightbox({ images, index, title, onClose, onIndex }) {
+  const prev = () => onIndex((index - 1 + images.length) % images.length);
+  const next = () => onIndex((index + 1) % images.length);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") prev();
+      else if (e.key === "ArrowRight") next();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, images.length]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+      className="fixed inset-0 z-[70] flex flex-col gap-3 bg-black/90 p-4"
+    >
+      <div
+        className="flex items-center justify-between text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="min-w-0 truncate text-sm text-white/80">
+          {title} · {index + 1}/{images.length}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => downloadDataUrl(images[index], safeImageName(title, index))}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-xs hover:bg-white/20"
+          >
+            <Download size={13} /> Download
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-white/70 hover:bg-white/10"
+            aria-label="Close"
+          >
+            <X size={18} />
+          </button>
+        </div>
+      </div>
+      <div
+        className="relative flex flex-1 items-center justify-center overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {images.length > 1 && (
+          <button
+            type="button"
+            onClick={prev}
+            className="absolute left-2 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            aria-label="Previous"
+          >
+            <ChevronLeft size={20} />
+          </button>
+        )}
+        <img
+          src={images[index]}
+          alt={`Photo ${index + 1}`}
+          className="max-h-full max-w-full rounded-lg object-contain"
+        />
+        {images.length > 1 && (
+          <button
+            type="button"
+            onClick={next}
+            className="absolute right-2 grid h-10 w-10 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
+            aria-label="Next"
+          >
+            <ChevronRight size={20} />
+          </button>
+        )}
+      </div>
+    </motion.div>
   );
 }
