@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -9,6 +9,8 @@ import {
   Sparkles as SparklesIcon,
   ChevronRight,
   SlidersHorizontal,
+  Menu,
+  X,
 } from "lucide-react";
 import LogoOrb3D from "../components/fx/LogoOrb3D.jsx";
 import Aurora from "../components/fx/Aurora.jsx";
@@ -18,6 +20,7 @@ import { cn } from "../lib/cn.js";
 import { useRealtimeStatus } from "../lib/useRealtime.js";
 import { useNotifications } from "../lib/useNotifications.js";
 import { useSidebarPrefs } from "../lib/useSidebarPrefs.js";
+import { useBackButton, exitApp } from "../lib/useBackButton.js";
 import NotificationsPanel from "../components/NotificationsPanel.jsx";
 import CommandPalette from "../components/CommandPalette.jsx";
 import CustomizeSidebar from "../components/CustomizeSidebar.jsx";
@@ -27,7 +30,9 @@ import { NAV } from "./nav.js";
 export default function AppLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [open, setOpen] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteSeed, setPaletteSeed] = useState("");
@@ -76,6 +81,23 @@ export default function AppLayout() {
   // to declutter for themselves on top of the admin ceiling.
   const visibleNav = adminAllowedNav.filter((n) => !sidebarPrefs.isHidden(n.to));
   const hiddenCount = adminAllowedNav.length - visibleNav.length;
+
+  // Close the mobile nav drawer whenever the route changes (e.g. tapping a link).
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  // Android hardware back button. Default native behaviour exits the whole app
+  // on every press; instead we close any open overlay first, then walk back up
+  // the in-app history, and only exit once we're at the dashboard root.
+  useBackButton(() => {
+    if (customizeOpen) return setCustomizeOpen(false);
+    if (paletteOpen) return setPaletteOpen(false);
+    if (notifOpen) return setNotifOpen(false);
+    if (mobileNavOpen) return setMobileNavOpen(false);
+    if (location.pathname !== "/app") return navigate(-1);
+    exitApp();
+  });
 
   const onLogout = () => {
     logout();
@@ -361,6 +383,14 @@ export default function AppLayout() {
           <div className="flex flex-1 items-center gap-3">
             <button
               type="button"
+              onClick={() => setMobileNavOpen(true)}
+              className="shrink-0 rounded-xl border border-white/10 bg-white/5 p-2 text-white/85 hover:bg-white/10 hover:text-white md:hidden"
+              aria-label="Open menu"
+            >
+              <Menu size={18} />
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setPaletteSeed("");
                 setPaletteOpen(true);
@@ -462,6 +492,100 @@ export default function AppLayout() {
         initialQuery={paletteSeed}
         onClose={() => setPaletteOpen(false)}
       />
+
+      {/* Mobile navigation drawer — the desktop rail is hidden below md, so this
+          is the only way to reach modules (Assignments, etc.) on a phone. */}
+      <AnimatePresence>
+        {mobileNavOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setMobileNavOpen(false)}
+            />
+            <motion.aside
+              initial={{ x: -300 }}
+              animate={{ x: 0 }}
+              exit={{ x: -300 }}
+              transition={{ type: "spring", stiffness: 300, damping: 32 }}
+              className="absolute left-0 top-0 flex h-full w-[82%] max-w-[300px] flex-col border-r border-white/10 bg-[#08081d] shadow-2xl"
+            >
+              <div className="flex items-center justify-between p-4">
+                <div className="flex items-center gap-3">
+                  <LogoOrb3D size={36} />
+                  <div className="leading-tight">
+                    <div className="font-display text-lg font-bold">
+                      Lumina<span className="text-accent-pink">.</span>
+                    </div>
+                    <div className="text-[10px] uppercase tracking-[0.2em] text-white/50">
+                      School OS
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="rounded-lg p-2 text-white/60 hover:bg-white/10 hover:text-white"
+                  aria-label="Close menu"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-3">
+                {visibleNav.map((n) => (
+                  <NavLink
+                    key={n.to}
+                    to={n.to}
+                    end={n.end}
+                    onClick={() => setMobileNavOpen(false)}
+                    className={({ isActive }) =>
+                      cn(
+                        "flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition-all",
+                        isActive
+                          ? "bg-gradient-to-r from-brand-500/30 to-accent-violet/20 text-white ring-1 ring-white/15"
+                          : "text-white/70 hover:bg-white/5 hover:text-white"
+                      )
+                    }
+                  >
+                    <n.icon size={18} />
+                    <span className="font-medium">{n.label}</span>
+                  </NavLink>
+                ))}
+              </nav>
+
+              <div className="border-t border-white/10 p-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setCustomizeOpen(true);
+                  }}
+                  className="mb-2 flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/65 hover:bg-white/10 hover:text-white"
+                >
+                  <SlidersHorizontal size={14} className="shrink-0" />
+                  <span className="flex-1 truncate">Customize sidebar</span>
+                  {hiddenCount > 0 && (
+                    <span className="shrink-0 rounded-full bg-brand-500/20 px-2 py-0.5 text-[10px] font-semibold text-brand-200 ring-1 ring-brand-400/30">
+                      {hiddenCount} hidden
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-sm text-white/70 hover:bg-white/10 hover:text-white"
+                >
+                  <LogOut size={16} className="shrink-0" />
+                  Sign out
+                </button>
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {customizeOpen && (
