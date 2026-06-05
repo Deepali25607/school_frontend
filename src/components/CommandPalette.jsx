@@ -22,20 +22,9 @@ import {
   HeartPulse,
   ShieldAlert,
   Trophy,
-  UtensilsCrossed,
   Clock,
-  LayoutDashboard,
   Wallet,
-  CalendarCheck,
-  ClipboardList,
-  Bus,
-  Briefcase,
-  BookOpen,
   Megaphone,
-  ClipboardCheck,
-  Settings,
-  ScrollText,
-  BarChart3,
   Award,
   CalendarClock,
   Vote,
@@ -83,51 +72,6 @@ const ICON_MAP = {
   UsersRound,
 };
 
-// Quick navigation entries shown when the query is empty.
-const QUICK_NAV = [
-  { label: "Dashboard", link: "/app", icon: LayoutDashboard },
-  { label: "Students", link: "/app/students", icon: Users },
-  { label: "Teachers", link: "/app/teachers", icon: GraduationCap },
-  { label: "Attendance", link: "/app/attendance", icon: CalendarCheck },
-  { label: "Fees & Finance", link: "/app/fees", icon: Wallet },
-  { label: "Exams & Results", link: "/app/exams", icon: Trophy },
-  { label: "Timetable", link: "/app/timetable", icon: ClipboardList },
-  { label: "Library", link: "/app/library", icon: Library },
-  { label: "Transport", link: "/app/transport", icon: Bus },
-  { label: "Hostel", link: "/app/hostel", icon: Building2 },
-  { label: "Payroll", link: "/app/payroll", icon: Briefcase },
-  { label: "Online Learning", link: "/app/learning", icon: BookOpen },
-  { label: "Events", link: "/app/events", icon: Calendar },
-  { label: "Inventory", link: "/app/inventory", icon: Package },
-  { label: "Leave", link: "/app/leave", icon: ClipboardCheck },
-  { label: "Communications", link: "/app/communications", icon: Megaphone },
-  { label: "Admissions", link: "/app/admissions", icon: UserPlus },
-  { label: "Maintenance", link: "/app/maintenance", icon: Wrench },
-  { label: "Visitors", link: "/app/visitors", icon: IdCard },
-  { label: "Documents", link: "/app/documents", icon: FileText },
-  { label: "Health", link: "/app/health", icon: HeartPulse },
-  { label: "Discipline", link: "/app/discipline", icon: ShieldAlert },
-  { label: "Achievements", link: "/app/achievements", icon: Trophy },
-  { label: "Cafeteria", link: "/app/cafeteria", icon: UtensilsCrossed },
-  { label: "Calendar", link: "/app/calendar", icon: Calendar },
-  { label: "Alumni", link: "/app/alumni", icon: Award },
-  { label: "Notice Board", link: "/app/notices", icon: Megaphone },
-  { label: "PTM Scheduling", link: "/app/ptm", icon: CalendarClock },
-  { label: "Polls & Surveys", link: "/app/polls", icon: Vote },
-  { label: "Scholarships", link: "/app/scholarships", icon: Landmark },
-  { label: "House Points", link: "/app/house-points", icon: Crown },
-  { label: "Fundraising", link: "/app/fundraising", icon: Target },
-  { label: "Sports", link: "/app/sports", icon: Swords },
-  { label: "Careers", link: "/app/careers", icon: Compass },
-  { label: "Suggestion Box", link: "/app/suggestions", icon: Lightbulb },
-  { label: "Substitutes", link: "/app/substitutes", icon: UserCog },
-  { label: "Staff Directory", link: "/app/staff", icon: UsersRound },
-  { label: "Year-End Promotion", link: "/app/promotion", icon: ArrowUpFromLine },
-  { label: "Reports", link: "/app/reports", icon: BarChart3 },
-  { label: "Audit Log", link: "/app/audit", icon: ScrollText },
-  { label: "Settings", link: "/app/settings", icon: Settings },
-];
-
 const RECENT_KEY = "lumina-search-recent";
 const MAX_RECENT = 5;
 
@@ -160,23 +104,26 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // The palette respects the same permission stack the sidebar does:
+  // Navigable modules, derived straight from the sidebar nav so the palette can
+  // never go stale (previously a hand-maintained list silently missed modules
+  // like Assignments). Respects the same permission stack the sidebar does:
   //   role default (NAV.roles)  →  admin-set hidden paths
-  // Anything filtered out here is also unreachable from search results.
-  const allowedPaths = useMemo(() => {
+  const modules = useMemo(() => {
     const role = user?.role;
     const adminHidden = new Set(user?.permissions?.hiddenPaths || []);
-    return new Set(
-      NAV
-        .filter((n) => n.roles === "*" || (role && n.roles.includes(role)))
-        .filter((n) => !adminHidden.has(n.to))
-        .map((n) => n.to)
-    );
+    return NAV
+      .filter((n) => n.roles === "*" || (role && n.roles.includes(role)))
+      .filter((n) => !adminHidden.has(n.to))
+      .map((n) => ({ label: n.label, link: n.to, icon: n.icon }));
   }, [user?.role, user?.permissions?.hiddenPaths]);
-  const visibleQuickNav = useMemo(
-    () => QUICK_NAV.filter((n) => allowedPaths.has(n.link)),
-    [allowedPaths]
-  );
+
+  // Modules whose name matches the current query — so typing "assignments"
+  // surfaces the page even though the backend search only indexes data records.
+  const matchedModules = useMemo(() => {
+    const term = debounced.trim().toLowerCase();
+    if (!term) return [];
+    return modules.filter((m) => m.label.toLowerCase().includes(term)).slice(0, 6);
+  }, [debounced, modules]);
 
   // Reset state whenever the palette is opened
   useEffect(() => {
@@ -227,10 +174,22 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
   // Flatten the current visible list into a single sequence for keyboard nav.
   // When q is empty we show recent + quick-nav; otherwise we show search hits.
   const flat = useMemo(() => {
-    if (debounced.trim() && results) {
-      return results.groups.flatMap((g) =>
-        g.items.map((item) => ({ ...item, _group: g.category }))
-      );
+    if (debounced.trim()) {
+      const mods = matchedModules.map((n) => ({
+        category: "Go to",
+        label: n.label,
+        sublabel: n.link,
+        link: n.link,
+        icon: "_quick",
+        _quickIcon: n.icon,
+        _group: "Go to",
+      }));
+      const hits = results
+        ? results.groups.flatMap((g) =>
+            g.items.map((item) => ({ ...item, _group: g.category }))
+          )
+        : [];
+      return [...mods, ...hits];
     }
     return [
       ...recent.map((r) => ({
@@ -242,7 +201,7 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
         _group: "Recent",
         _query: r,
       })),
-      ...visibleQuickNav.map((n) => ({
+      ...modules.map((n) => ({
         category: "Go to",
         label: n.label,
         sublabel: n.link,
@@ -252,7 +211,7 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
         _group: "Go to",
       })),
     ];
-  }, [debounced, results, recent, visibleQuickNav]);
+  }, [debounced, results, recent, modules, matchedModules]);
 
   const pickItem = useCallback(
     (item) => {
@@ -353,22 +312,28 @@ export default function CommandPalette({ open, onClose, initialQuery = "" }) {
 
             {/* Results */}
             <div ref={listRef} className="relative max-h-[60vh] overflow-y-auto p-2">
-              {debounced.trim() && results && results.total === 0 && !loading ? (
-                <Empty q={debounced} />
-              ) : debounced.trim() && results ? (
-                <ResultsGroups
-                  groups={results.groups}
-                  activeIdx={activeIdx}
-                  onPick={pickItem}
-                  setActive={setActiveIdx}
-                />
+              {debounced.trim() ? (
+                matchedModules.length === 0 &&
+                results &&
+                results.total === 0 &&
+                !loading ? (
+                  <Empty q={debounced} />
+                ) : (
+                  <QueryResults
+                    modules={matchedModules}
+                    groups={results?.groups || []}
+                    activeIdx={activeIdx}
+                    onPick={pickItem}
+                    setActive={setActiveIdx}
+                  />
+                )
               ) : (
                 <EmptyStateLists
                   recent={recent}
                   activeIdx={activeIdx}
                   onPick={pickItem}
                   setActive={setActiveIdx}
-                  quickNav={visibleQuickNav}
+                  quickNav={modules}
                 />
               )}
             </div>
@@ -404,10 +369,44 @@ function Hint({ children }) {
   );
 }
 
-function ResultsGroups({ groups, activeIdx, onPick, setActive }) {
+// Query results = matching modules ("Go to") first, then backend data hits.
+// One shared counter keeps row indices aligned with the `flat` list used for
+// keyboard navigation (modules occupy the first N indices).
+function QueryResults({ modules, groups, activeIdx, onPick, setActive }) {
   let counter = -1;
   return (
     <div className="space-y-3">
+      {modules.length > 0 && (
+        <div>
+          <div className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">
+            Go to
+          </div>
+          <ul className="space-y-0.5">
+            {modules.map((n) => {
+              counter += 1;
+              const idx = counter;
+              const item = {
+                category: "Go to",
+                label: n.label,
+                sublabel: n.link,
+                link: n.link,
+                icon: "_quick",
+                _quickIcon: n.icon,
+              };
+              return (
+                <ResultRow
+                  key={n.link}
+                  item={item}
+                  idx={idx}
+                  active={idx === activeIdx}
+                  onPick={onPick}
+                  setActive={setActive}
+                />
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {groups.map((g) => (
         <div key={g.category}>
           <div className="px-2 pb-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">
