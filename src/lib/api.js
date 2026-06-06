@@ -264,6 +264,23 @@ export const endpoints = {
   recordings: (params) =>
     api.get("/api/learning/recordings", { params }).then((r) => r.data),
   materials: () => api.get("/api/learning/materials").then((r) => r.data),
+  learningMeta: () => api.get("/api/learning/meta").then((r) => r.data),
+  liveClassAdd: (payload) =>
+    api.post("/api/learning/live", payload).then((r) => r.data),
+  liveClassDelete: (id) =>
+    api.delete(`/api/learning/live/${id}`).then((r) => r.data),
+  recordingAdd: (payload) =>
+    api.post("/api/learning/recordings", payload).then((r) => r.data),
+  recordingDelete: (id) =>
+    api.delete(`/api/learning/recordings/${id}`).then((r) => r.data),
+  recordingView: (id) =>
+    api.post(`/api/learning/recordings/${id}/view`).then((r) => r.data),
+  materialAdd: (payload) =>
+    api.post("/api/learning/materials", payload).then((r) => r.data),
+  materialDelete: (id) =>
+    api.delete(`/api/learning/materials/${id}`).then((r) => r.data),
+  materialDownload: (id) =>
+    api.post(`/api/learning/materials/${id}/download`).then((r) => r.data),
 
   // admissions
   admissions: (params) =>
@@ -273,6 +290,18 @@ export const endpoints = {
     api.post("/api/admissions", payload).then((r) => r.data),
   admissionMove: (id, stage) =>
     api.patch(`/api/admissions/${id}/move`, { stage }).then((r) => r.data),
+  admissionSetDocument: (id, patch) =>
+    api.patch(`/api/admissions/${id}/document`, patch).then((r) => r.data),
+
+  // document records (personal document file for students & teachers)
+  docRecords: (ownerType, ownerId) =>
+    api.get(`/api/doc-records/${ownerType}/${ownerId}`).then((r) => r.data),
+  docRecordAdd: (payload) =>
+    api.post("/api/doc-records", payload).then((r) => r.data),
+  docRecordUpdate: (id, patch) =>
+    api.patch(`/api/doc-records/${id}`, patch).then((r) => r.data),
+  docRecordDelete: (id) =>
+    api.delete(`/api/doc-records/${id}`).then((r) => r.data),
 
   // communications
   commsAudiences: () =>

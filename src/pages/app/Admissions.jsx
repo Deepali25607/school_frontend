@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   GraduationCap,
@@ -13,6 +13,8 @@ import {
   Sparkles as SparklesIcon,
   CheckCircle2,
   XCircle,
+  Upload,
+  Check,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
@@ -79,6 +81,12 @@ export default function Admissions() {
     if (selected?.id === applicantId) {
       setSelected((s) => ({ ...s, stage: toStage }));
     }
+  };
+
+  const onSetDocument = async (applicantId, name, patch) => {
+    const updated = await endpoints.admissionSetDocument(applicantId, { name, ...patch });
+    if (selected?.id === applicantId) setSelected(updated);
+    refetch();
   };
 
   return (
@@ -153,6 +161,7 @@ export default function Admissions() {
             stages={stages}
             onClose={() => setSelected(null)}
             onMove={(stage) => onMove(selected.id, stage)}
+            onSetDocument={(name, patch) => onSetDocument(selected.id, name, patch)}
           />
         )}
         {adding && (
@@ -243,7 +252,7 @@ function KanbanColumn({ stage, items, count, idx, onSelect }) {
   );
 }
 
-function ApplicantModal({ applicant, stages, onClose, onMove }) {
+function ApplicantModal({ applicant, stages, onClose, onMove, onSetDocument }) {
   const a = applicant;
   const currentIdx = stages.indexOf(a.stage);
   const next = stages[currentIdx + 1];
@@ -336,24 +345,13 @@ function ApplicantModal({ applicant, stages, onClose, onMove }) {
               </div>
               <ul className="space-y-1.5 text-sm">
                 {a.documents.map((d) => (
-                  <li key={d.name} className="flex items-center justify-between">
-                    <span className="text-white/80">{d.name}</span>
-                    {d.verified ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-300">
-                        <FileCheck2 size={12} /> Verified
-                      </span>
-                    ) : d.uploaded ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-amber-300">
-                        <FileCheck2 size={12} /> Uploaded
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-white/40">
-                        <FileX2 size={12} /> Missing
-                      </span>
-                    )}
-                  </li>
+                  <DocRow key={d.name} doc={d} onSetDocument={onSetDocument} />
                 ))}
               </ul>
+              <div className="mt-2 text-[10px] leading-snug text-white/40">
+                Upload a file to mark a document received, then tick to verify.
+                Unticking returns it to its uploaded (or missing) state.
+              </div>
             </Section>
           </div>
 
@@ -396,6 +394,77 @@ function ApplicantModal({ applicant, stages, onClose, onMove }) {
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+// A single document row: status pill + upload button + verify checkbox.
+// There is no document store on the backend, so "upload" simply records that
+// the file was received (uploaded=true); ticking the checkbox marks it verified.
+function DocRow({ doc, onSetDocument }) {
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef(null);
+
+  const run = async (patch) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onSetDocument(doc.name, patch);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onFile = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the same file be re-picked later
+    if (file) run({ uploaded: true });
+  };
+
+  return (
+    <li className="flex items-center justify-between gap-2">
+      <span className="min-w-0 truncate text-white/80">{doc.name}</span>
+      <div className="flex shrink-0 items-center gap-2">
+        {doc.verified ? (
+          <span className="inline-flex items-center gap-1 text-[11px] text-emerald-300">
+            <FileCheck2 size={12} /> Verified
+          </span>
+        ) : doc.uploaded ? (
+          <span className="inline-flex items-center gap-1 text-[11px] text-amber-300">
+            <FileCheck2 size={12} /> Uploaded
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[11px] text-white/40">
+            <FileX2 size={12} /> Missing
+          </span>
+        )}
+
+        <input ref={inputRef} type="file" className="hidden" onChange={onFile} />
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => inputRef.current?.click()}
+          title={doc.uploaded ? "Replace document" : "Upload document"}
+          className="rounded-md p-1 text-white/55 transition-colors hover:bg-white/10 hover:text-white disabled:opacity-40"
+        >
+          <Upload size={13} />
+        </button>
+
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => run({ verified: !doc.verified })}
+          title={doc.verified ? "Mark not verified" : "Mark verified"}
+          aria-pressed={doc.verified}
+          className={`flex h-5 w-5 items-center justify-center rounded-md ring-1 transition-all disabled:opacity-40 ${
+            doc.verified
+              ? "bg-emerald-500/25 text-emerald-300 ring-emerald-400/40"
+              : "bg-white/5 text-transparent ring-white/15 hover:ring-white/30"
+          }`}
+        >
+          <Check size={12} />
+        </button>
+      </div>
+    </li>
   );
 }
 

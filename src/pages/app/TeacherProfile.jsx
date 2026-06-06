@@ -17,12 +17,14 @@ import {
   Clock,
   XCircle,
   TrendingUp,
+  FolderOpen,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
 import { useRealtime } from "../../lib/useRealtime.js";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
 import Sparkles from "../../components/fx/Sparkles.jsx";
+import DocumentRecords from "../../components/DocumentRecords.jsx";
 
 const STATUS_TONES = {
   Active: "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30",
@@ -61,7 +63,7 @@ export default function TeacherProfile() {
   );
 
   useRealtime(
-    ["teachers.changed", "timetable.changed", "leave.changed", "discipline.changed"],
+    ["teachers.changed", "timetable.changed", "leave.changed", "discipline.changed", "doc-records.changed"],
     () => refetch()
   );
 
@@ -77,7 +79,7 @@ export default function TeacherProfile() {
 
   if (error) return <ErrorState error={error} onRetry={refetch} />;
 
-  const { teacher, classLoad, leave, discipline, activity } = data;
+  const { teacher, classLoad, leave, discipline, activity, docRecords } = data;
 
   return (
     <div className="space-y-5">
@@ -146,6 +148,9 @@ export default function TeacherProfile() {
         <TabButton active={tab === "discipline"} onClick={() => setTab("discipline")} icon={ShieldAlert}>
           Incidents logged
         </TabButton>
+        <TabButton active={tab === "documents"} onClick={() => setTab("documents")} icon={FolderOpen}>
+          Documents
+        </TabButton>
         <TabButton active={tab === "activity"} onClick={() => setTab("activity")} icon={Activity}>
           Activity
         </TabButton>
@@ -155,6 +160,15 @@ export default function TeacherProfile() {
       {tab === "classes" && <ClassLoadSection classLoad={classLoad} />}
       {tab === "leave" && <LeaveSection leave={leave} />}
       {tab === "discipline" && <DisciplineSection discipline={discipline} />}
+      {tab === "documents" && (
+        <DocumentRecords
+          ownerType="teacher"
+          ownerId={teacher.id}
+          records={docRecords?.items || []}
+          summary={docRecords?.summary}
+          onChange={refetch}
+        />
+      )}
       {tab === "activity" && <ActivitySection activity={activity} />}
     </div>
   );

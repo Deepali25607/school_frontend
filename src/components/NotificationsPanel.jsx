@@ -101,7 +101,7 @@ export default function NotificationsPanel({ open, anchorRef, onClose }) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -8, scale: 0.97 }}
           transition={{ duration: 0.18 }}
-          className="absolute right-0 top-full z-40 mt-2 w-[380px] origin-top-right overflow-hidden rounded-2xl border border-white/10 bg-[#0a0a1c]/95 shadow-glow backdrop-blur-xl"
+          className="fixed inset-x-3 top-16 z-40 w-auto origin-top overflow-hidden rounded-2xl border border-white/10 bg-[#0a0a1c]/95 shadow-glow backdrop-blur-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[380px] sm:max-w-[calc(100vw-1.5rem)] sm:origin-top-right"
         >
           <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-accent-violet/25 to-accent-pink/25 blur-3xl" />
 

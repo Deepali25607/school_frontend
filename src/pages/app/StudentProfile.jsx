@@ -26,12 +26,14 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  FolderOpen,
 } from "lucide-react";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
 import { useRealtime } from "../../lib/useRealtime.js";
 import { Skeleton, ErrorState } from "../../components/ui/Skeleton.jsx";
 import Sparkles from "../../components/fx/Sparkles.jsx";
+import DocumentRecords from "../../components/DocumentRecords.jsx";
 
 const SEVERITY_TONES = {
   Minor: "bg-white/5 text-white/65 ring-white/15",
@@ -90,6 +92,7 @@ export default function StudentProfile() {
       "library.changed",
       "hostel.changed",
       "transport.changed",
+      "doc-records.changed",
     ],
     () => refetch()
   );
@@ -108,7 +111,7 @@ export default function StudentProfile() {
     return <ErrorState error={error} onRetry={refetch} />;
   }
 
-  const { student, health, discipline, documents, exams, library, hostel, transport, achievements, cafeteria, billing } = data;
+  const { student, health, discipline, documents, exams, library, hostel, transport, achievements, cafeteria, billing, docRecords } = data;
   const houseGrad = HOUSE_COLORS[student.house] || "from-brand-500 to-accent-pink";
   const isBatchmateView = data.viewMode === "batchmate";
 
@@ -219,6 +222,9 @@ export default function StudentProfile() {
             <TabButton active={tab === "conduct"} onClick={() => setTab("conduct")} icon={ShieldAlert}>
               Conduct
             </TabButton>
+            <TabButton active={tab === "documents"} onClick={() => setTab("documents")} icon={FolderOpen}>
+              Documents
+            </TabButton>
             <TabButton active={tab === "records"} onClick={() => setTab("records")} icon={FileText}>
               Records
             </TabButton>
@@ -241,6 +247,15 @@ export default function StudentProfile() {
       )}
       {tab === "conduct" && (
         <ConductSection discipline={discipline} achievements={achievements} />
+      )}
+      {tab === "documents" && (
+        <DocumentRecords
+          ownerType="student"
+          ownerId={student.id}
+          records={docRecords?.items || []}
+          summary={docRecords?.summary}
+          onChange={refetch}
+        />
       )}
       {tab === "records" && (
         <RecordsSection documents={documents} library={library} hostel={hostel} transport={transport} billing={billing} />
