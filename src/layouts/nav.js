@@ -43,6 +43,7 @@ import {
   UsersRound,
   ShieldCheck,
   NotebookPen,
+  BookOpenCheck,
   MessageCircle,
   HandCoins,
 } from "lucide-react";
@@ -60,6 +61,7 @@ export const NAV = [
   { to: "/app/fees", label: "Fees & Finance", icon: Wallet, roles: ["admin", "principal", "accountant", "parent"] },
   { to: "/app/exams", label: "Exams & Results", icon: Trophy, roles: ["admin", "principal", "teacher", "student", "parent"] },
   { to: "/app/assignments", label: "Assignments", icon: NotebookPen, roles: ["admin", "principal", "teacher", "student", "parent"] },
+  { to: "/app/teaching-log", label: "Teaching Diary", icon: BookOpenCheck, roles: ["admin", "principal", "teacher", "student", "parent"] },
   { to: "/app/timetable", label: "Timetable", icon: ClipboardList, roles: "*" },
   { to: "/app/library", label: "Library", icon: Library, roles: "*" },
   { to: "/app/transport", label: "Transport", icon: Bus, roles: ["admin", "principal", "parent", "student"] },

@@ -847,6 +847,18 @@ export const endpoints = {
       .patch(`/api/assignments/${id}/submissions/${subId}`, payload)
       .then((r) => r.data),
 
+  // teaching log (daily classroom diary)
+  teachingLogs: (params) =>
+    api.get("/api/teaching-logs", { params }).then((r) => r.data),
+  teachingLog: (id) =>
+    api.get(`/api/teaching-logs/${id}`).then((r) => r.data),
+  teachingLogAdd: (payload) =>
+    api.post("/api/teaching-logs", payload).then((r) => r.data),
+  teachingLogUpdate: (id, payload) =>
+    api.patch(`/api/teaching-logs/${id}`, payload).then((r) => r.data),
+  teachingLogDelete: (id) =>
+    api.delete(`/api/teaching-logs/${id}`).then((r) => r.data),
+
   // 1:1 messages
   messages: () => api.get("/api/messages").then((r) => r.data),
   messagesSummary: () => api.get("/api/messages/summary").then((r) => r.data),

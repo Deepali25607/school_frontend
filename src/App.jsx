@@ -66,6 +66,7 @@ const Substitutes = lazy(() => import("./pages/app/Substitutes.jsx"));
 const Staff = lazy(() => import("./pages/app/Staff.jsx"));
 const Access = lazy(() => import("./pages/app/Access.jsx"));
 const Assignments = lazy(() => import("./pages/app/Assignments.jsx"));
+const TeachingLog = lazy(() => import("./pages/app/TeachingLog.jsx"));
 const Messages = lazy(() => import("./pages/app/Messages.jsx"));
 
 function Splash({ label = "Loading…" }) {
@@ -177,6 +178,7 @@ export default function App() {
           <Route path="staff" element={<Suspense fallback={<RouteFallback />}><Staff /></Suspense>} />
           <Route path="access" element={<Suspense fallback={<RouteFallback />}><Access /></Suspense>} />
           <Route path="assignments" element={<Suspense fallback={<RouteFallback />}><Assignments /></Suspense>} />
+          <Route path="teaching-log" element={<Suspense fallback={<RouteFallback />}><TeachingLog /></Suspense>} />
           <Route path="messages" element={<Suspense fallback={<RouteFallback />}><Messages /></Suspense>} />
         </Route>
         {/* Standalone print views — authenticated but render outside the app shell so
