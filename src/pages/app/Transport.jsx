@@ -77,7 +77,11 @@ export default function Transport() {
       <PageHeader
         eyebrow="Operations"
         title="Transport"
-        subtitle="Live bus tracking, routes, and parent notifications"
+        subtitle={
+          user?.role === "parent"
+            ? "Live tracking for your children's bus routes"
+            : "Live bus tracking, routes, and parent notifications"
+        }
       />
 
       {fetchError && <ErrorState error={fetchError} onRetry={refetch} />}
@@ -246,7 +250,9 @@ export default function Transport() {
           )}
           {!loading && routes.length === 0 && (
             <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center text-sm text-white/55">
-              No routes yet.{" "}
+              {user?.role === "parent"
+                ? "None of your children are assigned to a bus route."
+                : "No routes yet."}{" "}
               {canEdit && (
                 <button
                   onClick={() => setEditing("new")}

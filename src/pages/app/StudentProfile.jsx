@@ -27,7 +27,9 @@ import {
   TrendingUp,
   TrendingDown,
   FolderOpen,
+  UsersRound,
 } from "lucide-react";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { endpoints } from "../../lib/api.js";
 import { useApi } from "../../lib/useApi.js";
 import { useRealtime } from "../../lib/useRealtime.js";
@@ -228,6 +230,9 @@ export default function StudentProfile() {
             <TabButton active={tab === "records"} onClick={() => setTab("records")} icon={FileText}>
               Records
             </TabButton>
+            <TabButton active={tab === "classmates"} onClick={() => setTab("classmates")} icon={UsersRound}>
+              Classmates
+            </TabButton>
             <TabButton active={tab === "activity"} onClick={() => setTab("activity")} icon={Activity}>
               Activity
             </TabButton>
@@ -259,6 +264,9 @@ export default function StudentProfile() {
       )}
       {tab === "records" && (
         <RecordsSection documents={documents} library={library} hostel={hostel} transport={transport} billing={billing} />
+      )}
+      {tab === "classmates" && (
+        <ClassmatesSection student={student} classmates={data.classmates || []} />
       )}
       {tab === "activity" && (
         <ActivitySection activity={data.activity || []} />
@@ -890,6 +898,105 @@ function RecordsSection({ documents, library, hostel, transport, billing }) {
           <div className="text-xs text-white/40">Not using school transport — self drop-off.</div>
         )}
       </Card>
+    </div>
+  );
+}
+
+// =================== CLASSMATES ===================
+// Public roster info only (the backend sends batchmate-shaped rows), so no
+// contact / fee / health data can appear here for any viewer role.
+function ClassmatesSection({ student, classmates }) {
+  const { user } = useAuth();
+  // Parents can only open their own linked children's profiles — keep the
+  // cards non-clickable for them so they don't land on a 403.
+  const canOpenProfiles = ["admin", "principal", "teacher", "student"].includes(
+    user?.role
+  );
+
+  if (classmates.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-10 text-center text-sm text-white/55">
+        No other students in Grade {student.grade}.
+      </div>
+    );
+  }
+
+  const sameSection = classmates.filter(
+    (c) => c.section === student.section
+  ).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-white/65">
+        <span className="font-semibold text-white">{classmates.length}</span>{" "}
+        classmate{classmates.length === 1 ? "" : "s"} in Grade {student.grade}
+        {sameSection > 0 && (
+          <span className="text-white/45">
+            {" "}
+            · {sameSection} in Section {student.section}
+          </span>
+        )}
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {classmates.map((c) => {
+          const grad = HOUSE_COLORS[c.house] || "from-brand-500 to-accent-pink";
+          const inner = (
+            <>
+              <div
+                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${grad} font-display text-lg font-bold text-white`}
+              >
+                {c.avatar}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-display text-sm font-semibold">
+                  {c.name}
+                </div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-white/55">
+                  <span className="font-mono">{c.id}</span>
+                  <span>·</span>
+                  <span
+                    className={
+                      c.section === student.section ? "text-brand-300" : ""
+                    }
+                  >
+                    Section {c.section}
+                  </span>
+                  <span>·</span>
+                  <span>{c.house} House</span>
+                </div>
+                <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-white/65 ring-1 ring-white/10">
+                  <CalendarCheck
+                    size={10}
+                    className={
+                      c.attendance >= 90
+                        ? "text-emerald-300"
+                        : c.attendance >= 75
+                          ? "text-amber-300"
+                          : "text-rose-300"
+                    }
+                  />
+                  {c.attendance}% attendance
+                </div>
+              </div>
+            </>
+          );
+          const cls =
+            "flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition";
+          return canOpenProfiles ? (
+            <Link
+              key={c.id}
+              to={`/app/students/${c.id}`}
+              className={`${cls} hover:border-white/20 hover:bg-white/[0.06]`}
+            >
+              {inner}
+            </Link>
+          ) : (
+            <div key={c.id} className={cls}>
+              {inner}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
